@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CalDesk.App/CalDesk.App.csproj" />
+    <Project Path="src/CalDesk.CalDav/CalDesk.CalDav.csproj" />
+    <Project Path="src/CalDesk.Core/CalDesk.Core.csproj" />
+    <Project Path="src/CalDesk.Storage/CalDesk.Storage.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CalDesk.Tests/CalDesk.Tests.csproj" />
+  </Folder>
+</Solution>

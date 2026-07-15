@@ -1,0 +1,21 @@
+## .NET build output
+**/bin/
+**/obj/
+
+## Visual Studio / user
+*.user
+*.suo
+.vs/
+.idea/
+
+## NuGet
+*.nuget.cache
+*.lock.json
+
+## Local data / secrets
+*.db
+*.db-shm
+*.db-wal
+appsettings.*.local.json
+.env
+secrets.json

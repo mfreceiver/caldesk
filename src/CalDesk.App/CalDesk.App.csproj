@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>CalDesk</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <SatelliteResourceLanguages>zh-CN;en</SatelliteResourceLanguages>
+    <!-- Allow restore/design-time on non-Windows (actual WPF compile still requires Windows) -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CalDesk.Core\CalDesk.Core.csproj" />
+    <ProjectReference Include="..\CalDesk.CalDav\CalDesk.CalDav.csproj" />
+    <ProjectReference Include="..\CalDesk.Storage\CalDesk.Storage.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.2.0" />
+  </ItemGroup>
+
+</Project>
