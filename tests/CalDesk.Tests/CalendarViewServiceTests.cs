@@ -153,4 +153,38 @@ public sealed class CalendarViewServiceTests
         Assert.False(view.HasAny);
         Assert.All(view.Weeks.SelectMany(w => w.Days), d => Assert.True(d.IsEmpty));
     }
+
+    [Fact]
+    public void MultiDayAllDayEvent_AppearsOnEveryOverlappingDay()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        // Mon Jul 13 00:00 .. Thu Jul 16 00:00 → covers Mon, Tue, Wed (3 full days).
+        var ev = Ev(13, 0, 0, 0, 0, allDay: true, summary: "Retreat", calId: calId);
+        ev.EndUtc = new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero);
+
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildWeek(new[] { ev }, calendars, Monday, Tz, Today, Now);
+
+        Assert.Single(view.Days[0].AllDay); // Mon
+        Assert.Single(view.Days[1].AllDay); // Tue
+        Assert.Single(view.Days[2].AllDay); // Wed
+        Assert.True(view.Days[3].IsEmpty);  // Thu — event ends at Thu 00:00 (exclusive)
+    }
+
+    [Fact]
+    public void OvernightTimedEvent_AppearsOnBothDays()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        // Wed Jul 15 22:00 .. Thu Jul 16 02:00 → spans Wed and Thu.
+        var ev = Ev(15, 22, 0, 0, 0, summary: "Late", calId: calId);
+        ev.EndUtc = new DateTimeOffset(2026, 7, 16, 2, 0, 0, TimeSpan.Zero);
+
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildWeek(new[] { ev }, calendars, Monday, Tz, Today, Now);
+
+        Assert.Single(view.Days[2].Timed); // Wed
+        Assert.Single(view.Days[3].Timed); // Thu
+    }
 }

@@ -162,14 +162,31 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                     continue;
                 }
 
-                var zoned = TimeZoneInfo.ConvertTime(occ.StartUtc, displayTz);
-                var day = DateOnly.FromDateTime(zoned.DateTime);
-                if (!byDay.TryGetValue(day, out var bucket))
+                var startZoned = TimeZoneInfo.ConvertTime(occ.StartUtc, displayTz);
+                var startDay = DateOnly.FromDateTime(startZoned.DateTime);
+
+                // Inclusive last local day the occurrence overlaps. End is exclusive, so an event
+                // ending exactly at local midnight covers through the previous day only (e.g. an
+                // all-day event Mon 00:00..Tue 00:00 covers just Mon; one Mon..Thu covers Mon-Wed).
+                var endZoned = TimeZoneInfo.ConvertTime(occ.EndUtc, displayTz);
+                var lastDay = endZoned.TimeOfDay == TimeSpan.Zero
+                    ? DateOnly.FromDateTime(endZoned.Date).AddDays(-1)
+                    : DateOnly.FromDateTime(endZoned.DateTime);
+                if (lastDay < startDay)
                 {
-                    continue;
+                    lastDay = startDay; // zero-length / sub-day occurrence safety
                 }
 
-                bucket.Add(ToItem(occ, zoned, nowUtc));
+                // Place the occurrence on every overlapping day (clipped to the bucketed range),
+                // so multi-day all-day events and overnight events aren't dropped from later days.
+                var item = ToItem(occ, startZoned, nowUtc);
+                for (var day = startDay; day <= lastDay; day = day.AddDays(1))
+                {
+                    if (byDay.TryGetValue(day, out var bucket))
+                    {
+                        bucket.Add(item);
+                    }
+                }
             }
         }
 
