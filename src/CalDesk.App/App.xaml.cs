@@ -25,6 +25,8 @@ public partial class App : Application
     private ReminderService _reminders = null!;
     private WeekViewModel _vm = null!;
     private WeekWindow _week = null!;
+    private MonthViewModel _monthVm = null!;
+    private MonthWindow _month = null!;
 
     // Tray icon is a H.NotifyIcon.Wpf TaskbarIcon declared in App.xaml resources.
     // Accessed dynamically to avoid binding the build to its exact API surface.
@@ -53,7 +55,14 @@ public partial class App : Application
         _events = new EventService(_store.Events, _store.SyncOperations);
 
         _sync = new SyncRunner(_store, _factory, _settingsSvc.Current);
-        _sync.SyncCompleted += (_, _) => _week?.Dispatcher.InvokeAsync(() => _ = _vm.LoadAsync());
+        _sync.SyncCompleted += (_, _) => _week?.Dispatcher.InvokeAsync(() =>
+        {
+            _ = _vm.LoadAsync();
+            if (_monthVm is not null)
+            {
+                _ = _monthVm.LoadAsync();
+            }
+        });
         _sync.Start();
 
         _reminders = new ReminderService(_store, new IcalRecurrenceExpander(), () => _settingsSvc.Current, OnReminder);
@@ -67,6 +76,13 @@ public partial class App : Application
         _week.Show();
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
+
+        _monthVm = new MonthViewModel(_store, _viewSvc, _sync,
+            onAddNew: date => _ = OpenQuickAddAsync(date, null),
+            onEdit: id => _ = OpenQuickAddAsync(null, id));
+        _month = new MonthWindow(_monthVm);
+        _month.BackRequested += BackToWeek;
+        _week.MonthRequested += OpenMonth;
 
             _tray = FindResource("TrayIcon");
             if (_tray is TaskbarIcon tray)
@@ -100,7 +116,7 @@ public partial class App : Application
         }
     }
 
-    private static void ApplyWindowMode(WeekWindow w, AppSettings s)
+    private static void ApplyWindowMode(Window w, AppSettings s)
     {
         switch (s.WindowMode)
         {
@@ -114,6 +130,13 @@ public partial class App : Application
                 w.SetTopmost(false);
                 break;
         }
+    }
+
+    private static void ApplyMonthWindowSettings(MonthWindow w, AppSettings s)
+    {
+        w.IsPositionLocked = s.LockedPosition;
+        w.Opacity = Math.Clamp(s.Opacity, 0.15, 1.0);
+        // The month window has no persisted position of its own; it opens near the week window.
     }
 
     private async Task OpenQuickAddAsync(DateOnly? date, Guid? editId)
@@ -132,10 +155,15 @@ public partial class App : Application
             vm.InitializeForCreate(date ?? DateOnly.FromDateTime(DateTime.Today), defaultCal);
         }
 
-        var win = new QuickAddWindow { DataContext = vm, Owner = _week };
+        var owner = _month is { IsVisible: true } ? _month : _week;
+        var win = new QuickAddWindow { DataContext = vm, Owner = owner };
         vm.RequestClose += win.Close;
         win.ShowDialog();
         await _vm.LoadAsync();
+        if (_monthVm is not null)
+        {
+            await _monthVm.LoadAsync();
+        }
     }
 
     private void OnReminder(ReminderService.Notification n)
@@ -157,6 +185,7 @@ public partial class App : Application
     }
 
     private void OnShowWindow(object sender, RoutedEventArgs e) => ActivateWeek();
+    private void OnShowMonth(object sender, RoutedEventArgs e) => OpenMonth();
     private void OnQuickAdd(object sender, RoutedEventArgs e) => _ = OpenQuickAddAsync(DateOnly.FromDateTime(DateTime.Today), null);
     private void OnSync(object sender, RoutedEventArgs e) => _ = _sync.RunAsync();
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
@@ -177,6 +206,36 @@ public partial class App : Application
         _week.Activate();
     }
 
+    private void OpenMonth()
+    {
+        if (_month is null)
+        {
+            return;
+        }
+
+        ApplyMonthWindowSettings(_month, _settingsSvc.Current);
+        if (!_month.IsVisible)
+        {
+            _month.Show();
+        }
+
+        _month.ApplyGadgetStyles();
+        ApplyWindowMode(_month, _settingsSvc.Current);
+        _monthVm.NavigateTo(DateOnly.FromDateTime(DateTime.Today));
+        _week.Hide();
+    }
+
+    private void BackToWeek()
+    {
+        _month?.Hide();
+        if (_week is not null && !_week.IsVisible)
+        {
+            _week.Show();
+        }
+
+        _week?.Activate();
+    }
+
     private void OpenSettings()
     {
         var vm = new SettingsViewModel(_store, _settingsSvc, _creds, _factory, _sync);
@@ -189,8 +248,18 @@ public partial class App : Application
         var s = _settingsSvc.Current;
         ApplyWindowSettings(_week, s);
         ApplyWindowMode(_week, s);
+        if (_month is not null)
+        {
+            ApplyMonthWindowSettings(_month, s);
+            ApplyWindowMode(_month, s);
+        }
+
         _sync.ReapplyInterval(s);
         _ = _vm.LoadAsync();
+        if (_monthVm is not null)
+        {
+            _ = _monthVm.LoadAsync();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

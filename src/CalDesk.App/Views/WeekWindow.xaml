@@ -60,8 +60,11 @@
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding WeekHeader}" FontSize="15" FontWeight="SemiBold"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <Button Grid.Column="2" Content="＋" FontSize="17" Style="{StaticResource GhostButton}"
-                        Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Content="＋" FontSize="17" Style="{StaticResource GhostButton}"
+                            Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项" />
+                    <Button Content="月" Style="{StaticResource GhostButton}" ToolTip="月视图" Click="OnMonth" />
+                </StackPanel>
             </Grid>
 
             <!-- days -->

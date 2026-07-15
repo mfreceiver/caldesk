@@ -42,6 +42,11 @@ public partial class WeekWindow : Window
         }
     }
 
+    /// <summary>Raised when the user clicks the "月" button to open the month view.</summary>
+    public event Action? MonthRequested;
+
+    private void OnMonth(object sender, RoutedEventArgs e) => MonthRequested?.Invoke();
+
     // Closing the window hides it to the tray (app stays alive via tray icon).
     protected override void OnClosing(CancelEventArgs e)
     {
