@@ -1,0 +1,119 @@
+<Window x:Class="CalDesk.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
+        mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
+        Title="设置" Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        FontFamily="Microsoft YaHei UI" FontSize="13">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <GroupBox Grid.Row="0" Header="CalDAV 账户" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="服务器" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1" Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
+                </Grid>
+                <Grid Grid.Row="1" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="用户名" VerticalAlignment="Center" />
+                    <TextBox Grid.Column="1" Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
+                </Grid>
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="密码" VerticalAlignment="Center" />
+                    <PasswordBox x:Name="PasswordBox" PasswordChanged="OnPasswordChanged" Padding="4" />
+                </Grid>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Grid.Row="1" Header="桌面窗口" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="窗口模式" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding WindowModes}" SelectedItem="{Binding WindowMode}" />
+                </Grid>
+                <Grid Grid.Row="1" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="44" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="透明度" VerticalAlignment="Center" />
+                    <Slider Grid.Column="1" Minimum="0.15" Maximum="1.0" Value="{Binding Opacity}" TickFrequency="0.05" />
+                    <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat=P0}" VerticalAlignment="Center" />
+                </Grid>
+                <CheckBox Grid.Row="2" Content="锁定位置（禁止拖动）" IsChecked="{Binding LockedPosition}" Margin="0,0,0,4" />
+                <CheckBox Grid.Row="3" Content="开机启动" IsChecked="{Binding StartWithWindows}" />
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Grid.Row="2" Header="默认值" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="默认时长(分)" Opacity="0.7" />
+                    <TextBox Text="{Binding DefaultDurationMinutes}" Padding="4" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                    <TextBlock Text="默认提醒(分)" Opacity="0.7" />
+                    <TextBox Text="{Binding DefaultReminderMinutes}" Padding="4" />
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="同步间隔(分)" Opacity="0.7" />
+                    <TextBox Text="{Binding SyncIntervalMinutes}" Padding="4" />
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
+        <TextBlock Grid.Row="3" Margin="0,0,0,8" Opacity="0.6" TextWrapping="Wrap"
+                   Text="提示：服务器填 CalDAV 根地址或完整日历 URL，例如 https://radi.vectory.cn:18443/mar/work/" />
+
+        <TextBlock Grid.Row="4" Text="{Binding StatusText}" Opacity="0.6" Margin="0,0,0,6" />
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="连接并保存" Command="{Binding SaveCommand}" Padding="16,4" Margin="0,0,8,0" IsDefault="True"
+                    IsEnabled="{Binding CanSave}" />
+            <Button Content="关闭" Padding="16,4" IsCancel="True" Click="OnClose" />
+        </StackPanel>
+    </Grid>
+</Window>
