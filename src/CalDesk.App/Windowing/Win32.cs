@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace CalDesk.App.Windowing;
 
 /// <summary>Minimal Win32 interop for desktop-gadget window behavior.</summary>
-internal static class Win32
+internal static partial class Win32
 {
     public const int GWL_EXSTYLE = -20;
 

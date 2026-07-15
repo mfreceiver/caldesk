@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Threading;
 using CalDesk.App.Models;
 using CalDesk.CalDav;
 using CalDesk.CalDav.Synchronization;
@@ -8,7 +9,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CalDesk.App.Services;
 
-/// <summary>Drives periodic + manual sync against the configured account and exposes status.</summary>
+/// <summary>Drives periodic + manual sync against the configured account and exposes status.
+/// Status updates are marshaled to the UI thread (the Timer callback runs on the thread pool).</summary>
 public sealed partial class SyncRunner : ObservableObject, IDisposable
 {
     private readonly StorageServices _store;
@@ -16,6 +18,9 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
     private TimeSpan _interval;
     private Timer? _timer;
     private int _running;
+
+    // Captured on the UI thread at construction; null under tests (status updates just run inline).
+    private readonly SynchronizationContext? _uiContext;
 
     [ObservableProperty]
     private string _status = "未同步";
@@ -30,6 +35,7 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
         _store = store;
         _factory = factory;
         _interval = TimeSpan.FromMinutes(Math.Max(1, settings.SyncIntervalMinutes));
+        _uiContext = SynchronizationContext.Current;
     }
 
     public void Start()
@@ -48,6 +54,20 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Set <see cref="Status"/> on the UI thread so WPF binding never sees a
+    /// cross-thread PropertyChanged.</summary>
+    private void SetStatus(string value)
+    {
+        if (_uiContext is not null)
+        {
+            _uiContext.Post(_ => Status = value, null);
+        }
+        else
+        {
+            Status = value;
+        }
+    }
+
     public async Task RunAsync()
     {
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
@@ -60,11 +80,11 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
             var accounts = await _store.Accounts.GetAllAsync();
             if (accounts.Count == 0)
             {
-                Status = "未配置账户";
+                SetStatus("未配置账户");
                 return;
             }
 
-            Status = "同步中…";
+            SetStatus("同步中…");
             var account = accounts[0];
 
             await using var client = await _factory.CreateAsync(account);
@@ -72,17 +92,17 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
             var engine = new SyncEngine(_store.Events, _store.Calendars, _store.SyncState, _store.SyncOperations, client);
             LastReport = await engine.SyncAsync();
 
-            Status = LastReport.HasConflicts
+            SetStatus(LastReport.HasConflicts
                 ? $"有 {LastReport.ConflictEventIds.Count} 个冲突待处理"
                 : LastReport.Errors.Count > 0
                     ? "同步出错（已记录）"
-                    : $"已同步 · 拉 {LastReport.Pulled} · 推 {LastReport.Pushed}";
+                    : $"已同步 · 拉 {LastReport.Pulled} · 推 {LastReport.Pushed}");
 
             SyncCompleted?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
-            Status = "同步失败：" + ex.Message;
+            SetStatus("同步失败：" + ex.Message);
         }
         finally
         {

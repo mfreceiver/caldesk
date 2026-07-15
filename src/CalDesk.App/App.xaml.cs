@@ -9,6 +9,7 @@ using CalDesk.CalDav;
 using CalDesk.CalDav.Recurrence;
 using CalDesk.Core.Services;
 using CalDesk.Storage;
+using H.NotifyIcon;
 
 namespace CalDesk.App;
 
@@ -35,7 +36,9 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        Directory.CreateDirectory(AppDataDir);
+        try
+        {
+            Directory.CreateDirectory(AppDataDir);
 
         var db = new CalDeskDatabase(Path.Combine(AppDataDir, "caldesk.db"));
         await db.InitializeAsync();
@@ -65,13 +68,26 @@ public partial class App : Application
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
 
-        _tray = FindResource("TrayIcon");
+            _tray = FindResource("TrayIcon");
+            if (_tray is TaskbarIcon tray)
+            {
+                // Icon lives only in Application.Resources, so it never gets a Loaded event —
+                // force it into existence. Efficiency mode off so our timers aren't throttled.
+                tray.ForceCreate(enablesEfficiencyMode: false);
+            }
 
-        _vm.NavigateTo(WeekViewModel.MondayOf(DateTime.Today));
+            _vm.NavigateTo(WeekViewModel.MondayOf(DateTime.Today));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.ToString(), "CalDesk 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(-1);
+        }
     }
 
     private static void ApplyWindowSettings(WeekWindow w, AppSettings s)
     {
+        w.IsPositionLocked = s.LockedPosition;
         w.Opacity = Math.Clamp(s.Opacity, 0.15, 1.0);
         if (!double.IsNaN(s.WindowLeft))
         {
@@ -128,14 +144,14 @@ public partial class App : Application
         {
             try
             {
-                if (_tray is not null)
+                if (_tray is TaskbarIcon tray)
                 {
-                    ((dynamic)_tray).ShowBalloonTip(n.Title, n.Body);
+                    tray.ShowNotification(n.Title, n.Body);
                 }
             }
             catch
             {
-                // Balloon API differs across versions; never crash.
+                // Notification API differs across versions; never crash.
             }
         });
     }
@@ -191,10 +207,7 @@ public partial class App : Application
         _sync?.Dispose();
         try
         {
-            if (_tray is not null)
-            {
-                ((dynamic)_tray).Dispose();
-            }
+            (_tray as TaskbarIcon)?.Dispose();
         }
         catch
         {

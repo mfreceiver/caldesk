@@ -7,7 +7,7 @@ namespace CalDesk.App.Services;
 
 /// <summary><see cref="ICredentialStore"/> backed by the Windows Credential Manager
 /// (CRED_TYPE_GENERIC, persisted to local machine). Passwords never touch SQLite or disk files.</summary>
-public sealed class WindowsCredentialStore : ICredentialStore
+public sealed partial class WindowsCredentialStore : ICredentialStore
 {
     private const uint CRED_TYPE_GENERIC = 1;
     private const uint CRED_PERSIST_LOCAL_MACHINE = 2;

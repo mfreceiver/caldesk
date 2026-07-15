@@ -10,6 +10,9 @@ public partial class WeekWindow : Window
 {
     public WeekViewModel ViewModel { get; }
 
+    /// <summary>When true (settings lock), the window ignores drag gestures.</summary>
+    public bool IsPositionLocked { get; set; }
+
     public WeekWindow(WeekViewModel vm)
     {
         InitializeComponent();
@@ -19,6 +22,11 @@ public partial class WeekWindow : Window
 
     private void OnDrag(object sender, MouseButtonEventArgs e)
     {
+        if (IsPositionLocked)
+        {
+            return;
+        }
+
         if (e.ChangedButton == MouseButton.Left)
         {
             DragMove();

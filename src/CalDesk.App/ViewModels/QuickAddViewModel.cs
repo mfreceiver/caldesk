@@ -129,7 +129,9 @@ public sealed partial class QuickAddViewModel : ObservableObject
             }
 
             var sLocal = dateOnly.ToDateTime(s, DateTimeKind.Unspecified);
-            var eLocal = dateOnly.ToDateTime(e <= s ? s.AddHours(1) : e, DateTimeKind.Unspecified);
+            // End clock at/before start → overnight event (ends the following day).
+            var endDateOnly = e <= s ? dateOnly.AddDays(1) : dateOnly;
+            var eLocal = endDateOnly.ToDateTime(e, DateTimeKind.Unspecified);
             startUtc = new DateTimeOffset(sLocal, tz.GetUtcOffset(sLocal)).UtcDateTime;
             endUtc = new DateTimeOffset(eLocal, tz.GetUtcOffset(eLocal)).UtcDateTime;
         }
