@@ -230,7 +230,9 @@ public sealed class CalDavClient : ICalDavClient
         }
         if (r.Props.TryGetValue("sync-token", out var token) && !string.IsNullOrEmpty(token))
         {
-            info.SyncToken = token;
+            // The server advertises sync-collection support. The actual baseline token is
+            // obtained by the sync engine on first sync — not reused here, since the local
+            // cache is empty at discovery time and reusing it would skip all existing events.
             info.SupportsSyncToken = true;
         }
     }
