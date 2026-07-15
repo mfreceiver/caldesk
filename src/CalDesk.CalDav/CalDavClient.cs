@@ -119,7 +119,9 @@ public sealed class CalDavClient : ICalDavClient
         using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
         {
-            throw new CalDavException($"PUT {path} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            throw new CalDavException(
+                $"PUT {path} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}",
+                (int)resp.StatusCode);
         }
 
         var etag = resp.Headers.ETag?.Tag;
@@ -134,7 +136,9 @@ public sealed class CalDavClient : ICalDavClient
         using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode && resp.StatusCode != System.Net.HttpStatusCode.NotFound)
         {
-            throw new CalDavException($"DELETE {href} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            throw new CalDavException(
+                $"DELETE {href} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}",
+                (int)resp.StatusCode);
         }
     }
 
@@ -263,10 +267,29 @@ public sealed class CalDavClient : ICalDavClient
         using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode)
         {
-            throw new CalDavException($"{method} {path} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+            var precondition = ExtractPrecondition(resp);
+            throw new CalDavException(
+                $"{method} {path} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}",
+                (int)resp.StatusCode,
+                precondition);
         }
 
         return await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Pull the DAV precondition token from a 412 response (e.g.
+    /// <c>Precondition: valid-sync-token</c>), if present.</summary>
+    private static string? ExtractPrecondition(HttpResponseMessage resp)
+    {
+        foreach (var value in resp.Headers.Where(h => string.Equals(h.Key, "Precondition", StringComparison.OrdinalIgnoreCase))
+                                          .SelectMany(h => h.Value))
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+        return null;
     }
 
     // ---- path helpers ------------------------------------------------------
@@ -306,4 +329,22 @@ public sealed class CalDavClient : ICalDavClient
     }
 }
 
-public sealed class CalDavException(string message) : Exception(message);
+public sealed class CalDavException : Exception
+{
+    /// <summary>HTTP status code associated with the failure, when known. Used by callers
+    /// (e.g. <see cref="Synchronization.SyncEngine"/>) to distinguish a rejected sync-token
+    /// (403/409) from transient/network failures without parsing <see cref="Exception.Message"/>.</summary>
+    public int? StatusCode { get; }
+
+    /// <summary>DAV precondition token (e.g. <c>valid-sync-token</c>) when the server reported
+    /// one via the <c>Precondition</c> header in a 412 response. Null when not applicable.</summary>
+    public string? Precondition { get; }
+
+    public CalDavException(string message) : base(message) { }
+
+    public CalDavException(string message, int? statusCode, string? precondition = null) : base(message)
+    {
+        StatusCode = statusCode;
+        Precondition = precondition;
+    }
+}

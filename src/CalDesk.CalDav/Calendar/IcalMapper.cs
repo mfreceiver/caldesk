@@ -13,26 +13,43 @@ namespace CalDesk.CalDav.Calendar;
 /// Edits preserve the original raw object so unknown / X- properties survive (NFR-05).</summary>
 public static class IcalMapper
 {
-    /// <summary>Parse a raw iCalendar object into one or more events.</summary>
+    /// <summary>Parse a raw iCalendar object into one or more events. Returns an empty list
+    /// when the resource is empty but parseable. <b>Does not</b> distinguish "parse failed"
+    /// from "no events" — use <see cref="TryToCalendarEvents"/> from sync code where the
+    /// distinction matters.</summary>
     public static List<CalendarEvent> ToCalendarEvents(string raw, Guid calendarId, string? href, string? etag)
     {
-        var result = new List<CalendarEvent>();
+        return TryToCalendarEvents(raw, calendarId, href, etag).Events.ToList();
+    }
+
+    /// <summary>Parse with a typed outcome: a parse failure (G5-21 quarantine) is surfaced as
+    /// <see cref="CalendarParseResult.Success"/> = false with <see cref="CalendarParseResult.Error"/>,
+    /// rather than silently becoming an empty list. The caller (sync engine) must NOT advance
+    /// past a resource that failed to parse — that would permanently lose the resource.</summary>
+    public static CalendarParseResult TryToCalendarEvents(string raw, Guid calendarId, string? href, string? etag)
+    {
         Ical.Net.Calendar cal;
         try
         {
             cal = Ical.Net.Calendar.Load(new StringReader(raw));
         }
-        catch
+        catch (Exception ex)
         {
-            return result;
+            return new CalendarParseResult(
+                Success: false,
+                Events: new List<CalendarEvent>(),
+                Error: ex.Message,
+                Href: href,
+                ETag: etag);
         }
 
+        var events = new List<CalendarEvent>();
         foreach (var ve in cal.Events)
         {
-            result.Add(Map(ve, calendarId, href, etag, raw));
+            events.Add(Map(ve, calendarId, href, etag, raw));
         }
 
-        return result;
+        return new CalendarParseResult(Success: true, Events: events, Error: null, Href: href, ETag: etag);
     }
 
     /// <summary>Serialize an event for upload. When raw data exists, edit it in place
@@ -89,11 +106,21 @@ public static class IcalMapper
 
     private static DateTimeOffset ResolveEnd(IcalEvent ve, CalDateTime? start, DateTimeOffset startUtc, bool isAllDay)
     {
+        // 1) Explicit DTEND wins.
         if (ve.DtEnd is not null)
         {
             return ToUtc(ve.DtEnd);
         }
 
+        // 2) DURATION: end = DTSTART + DURATION (RFC 5545 §3.6.1 — DTEND and DURATION are
+        //    mutually exclusive but either may be present).
+        if (ve.Duration is { } dur && dur.ToTimeSpanUnspecified() is { } ts && ts > TimeSpan.Zero)
+        {
+            return startUtc + ts;
+        }
+
+        // 3) RFC 5545 defaults when neither DTEND nor DURATION is present:
+        //    all-day ⇒ +1 day, timed ⇒ zero-length event.
         return isAllDay ? startUtc.AddDays(1) : startUtc;
     }
 
@@ -267,3 +294,13 @@ public static class IcalMapper
         }
     }
 }
+
+/// <summary>Typed outcome of <see cref="IcalMapper.TryToCalendarEvents"/>. When
+/// <see cref="Success"/> is false, <see cref="Events"/> is empty and <see cref="Error"/>
+/// describes the parse failure; the caller must NOT advance past this resource.</summary>
+public sealed record CalendarParseResult(
+    bool Success,
+    IReadOnlyList<CalendarEvent> Events,
+    string? Error,
+    string? Href,
+    string? ETag);
