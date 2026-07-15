@@ -2,10 +2,22 @@ using CalDesk.Core.Models;
 
 namespace CalDesk.Core.Services;
 
+/// <summary>Runs a unit of work inside a single storage transaction. Implemented by the storage
+/// layer (e.g. <c>StorageServices</c>); when supplied to <see cref="EventService"/> each local
+/// mutation + its outbox enqueue commit atomically. Optional for backward compatibility.</summary>
+public interface ITransactionRunner
+{
+    Task RunInTransactionAsync(Func<Task> work, CancellationToken ct = default);
+}
+
 /// <summary>Application service for local-first event mutations.
 /// Writes hit SQLite immediately (UI can refresh at once), enqueue a sync operation,
-/// and leave the actual remote PUT/DELETE to the sync engine.</summary>
-public sealed class EventService(IEventRepository events, ISyncOperationRepository operations)
+/// and leave the actual remote PUT/DELETE to the sync engine.
+///
+/// When an <see cref="ITransactionRunner"/> is supplied, each mutation and its outbox enqueue
+/// run in one SQLite transaction (atomic: both or neither). Edits to an event also coalesce
+/// the pending outbox entry instead of stacking duplicates.</summary>
+public sealed class EventService(IEventRepository events, ISyncOperationRepository operations, ITransactionRunner? transaction = null)
 {
     /// <summary>Create a new event locally and queue it for upload.</summary>
     public async Task<CalendarEvent> CreateAsync(CalendarEvent evt, CancellationToken ct = default)
@@ -26,24 +38,36 @@ public sealed class EventService(IEventRepository events, ISyncOperationReposito
         evt.CreatedAt = now;
         evt.UpdatedAt = now;
 
-        await events.UpsertAsync(evt, ct).ConfigureAwait(false);
-        await operations.EnqueueAsync(new SyncOperation { EventId = evt.Id, Kind = SyncOperationKind.Create }, ct).ConfigureAwait(false);
+        await RunAsync(async () =>
+        {
+            await events.UpsertAsync(evt, ct).ConfigureAwait(false);
+            await operations.EnqueueAsync(new SyncOperation { EventId = evt.Id, Kind = SyncOperationKind.Create }, ct).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         return evt;
     }
 
-    /// <summary>Update an existing event locally and queue it for upload.</summary>
+    /// <summary>Update an existing event locally and queue it for upload.
+    /// An event that has not yet been uploaded (NewLocal) stays NewLocal so the outbox keeps a
+    /// single Create op (Create+Update→Create); otherwise it becomes ModifiedLocal.</summary>
     public async Task<CalendarEvent> UpdateAsync(CalendarEvent evt, CancellationToken ct = default)
     {
-        evt.SyncStatus = SyncStatus.ModifiedLocal;
+        if (evt.SyncStatus != SyncStatus.NewLocal)
+        {
+            evt.SyncStatus = SyncStatus.ModifiedLocal;
+        }
         evt.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await events.UpsertAsync(evt, ct).ConfigureAwait(false);
-        await operations.EnqueueAsync(new SyncOperation { EventId = evt.Id, Kind = SyncOperationKind.Update }, ct).ConfigureAwait(false);
+        await RunAsync(async () =>
+        {
+            await events.UpsertAsync(evt, ct).ConfigureAwait(false);
+            await operations.EnqueueAsync(new SyncOperation { EventId = evt.Id, Kind = SyncOperationKind.Update }, ct).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         return evt;
     }
 
     /// <summary>Soft-delete locally and queue a remote delete.
-    /// Events that never reached the server are hard-deleted immediately.</summary>
+    /// Events that never reached the server (NewLocal) are hard-deleted immediately; their pending
+    /// Create op is dropped by the events→outbox foreign-key cascade (Create+Delete→remove + drop).</summary>
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var evt = await events.GetAsync(id, ct).ConfigureAwait(false);
@@ -61,7 +85,22 @@ public sealed class EventService(IEventRepository events, ISyncOperationReposito
         evt.SyncStatus = SyncStatus.DeletedLocal;
         evt.DeletedAt = DateTimeOffset.UtcNow;
         evt.UpdatedAt = evt.DeletedAt.Value;
-        await events.UpsertAsync(evt, ct).ConfigureAwait(false);
-        await operations.EnqueueAsync(new SyncOperation { EventId = evt.Id, Kind = SyncOperationKind.Delete }, ct).ConfigureAwait(false);
+        await RunAsync(async () =>
+        {
+            await events.UpsertAsync(evt, ct).ConfigureAwait(false);
+            await operations.EnqueueAsync(new SyncOperation { EventId = evt.Id, Kind = SyncOperationKind.Delete }, ct).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+    }
+
+    private async Task RunAsync(Func<Task> work, CancellationToken ct)
+    {
+        if (transaction is null)
+        {
+            await work().ConfigureAwait(false);
+        }
+        else
+        {
+            await transaction.RunInTransactionAsync(work, ct).ConfigureAwait(false);
+        }
     }
 }

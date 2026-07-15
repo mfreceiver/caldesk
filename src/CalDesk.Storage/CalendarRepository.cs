@@ -12,8 +12,8 @@ internal sealed class CalendarRepository : ICalendarRepository
 
     public async Task<IReadOnlyList<CalendarInfo>> GetAllAsync(CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             SELECT id, account_id, remote_url, display_name, color, sort_order,
                    supports_sync_token, ctag, sync_token, is_selected, updated_at
@@ -30,8 +30,8 @@ internal sealed class CalendarRepository : ICalendarRepository
 
     public async Task<IReadOnlyList<CalendarInfo>> GetByAccountAsync(Guid accountId, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             SELECT id, account_id, remote_url, display_name, color, sort_order,
                    supports_sync_token, ctag, sync_token, is_selected, updated_at
@@ -50,8 +50,8 @@ internal sealed class CalendarRepository : ICalendarRepository
 
     public async Task<CalendarInfo?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             SELECT id, account_id, remote_url, display_name, color, sort_order,
                    supports_sync_token, ctag, sync_token, is_selected, updated_at
@@ -68,8 +68,8 @@ internal sealed class CalendarRepository : ICalendarRepository
 
     public async Task<CalendarInfo?> FindByRemoteUrlAsync(string remoteUrl, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             SELECT id, account_id, remote_url, display_name, color, sort_order,
                    supports_sync_token, ctag, sync_token, is_selected, updated_at
@@ -87,8 +87,8 @@ internal sealed class CalendarRepository : ICalendarRepository
 
     public async Task UpsertAsync(CalendarInfo calendar, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             INSERT INTO calendars (id, account_id, remote_url, display_name, color, sort_order,
                                    supports_sync_token, ctag, sync_token, is_selected, updated_at)
@@ -122,8 +122,8 @@ internal sealed class CalendarRepository : ICalendarRepository
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = "DELETE FROM calendars WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", DbConvert.ToText(id));
         await cmd.ExecuteNonQueryAsync(ct);

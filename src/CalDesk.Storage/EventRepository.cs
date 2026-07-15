@@ -20,8 +20,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task<CalendarEvent?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = $"SELECT {SelectColumns} FROM events WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", DbConvert.ToText(id));
 
@@ -33,8 +33,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task<CalendarEvent?> FindByUidAsync(Guid calendarId, string uid, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = $"SELECT {SelectColumns} FROM events WHERE calendar_id = @calendar_id AND uid = @uid LIMIT 1";
         cmd.Parameters.AddWithValue("@calendar_id", DbConvert.ToText(calendarId));
         cmd.Parameters.AddWithValue("@uid", uid);
@@ -47,8 +47,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task<CalendarEvent?> FindByRemoteHrefAsync(string href, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = $"SELECT {SelectColumns} FROM events WHERE remote_href = @href LIMIT 1";
         cmd.Parameters.AddWithValue("@href", href);
 
@@ -67,8 +67,8 @@ internal sealed class EventRepository : IEventRepository
         if (calendarIds.Count == 0)
             return Array.Empty<CalendarEvent>();
 
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
 
         // Build the IN(...) list with dynamic parameter names.
         var idParams = new List<string>(calendarIds.Count);
@@ -101,8 +101,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task<IReadOnlyList<CalendarEvent>> GetPendingSyncAsync(CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = $"""
             SELECT {SelectColumns}
             FROM events
@@ -120,8 +120,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task UpsertAsync(CalendarEvent evt, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             INSERT INTO events (
                 id, calendar_id, uid, remote_href, etag, icalendar_data, summary, description,
@@ -181,8 +181,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task MarkDeletedAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             UPDATE events
             SET deleted_at = @now,
@@ -198,8 +198,8 @@ internal sealed class EventRepository : IEventRepository
 
     public async Task HardDeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = "DELETE FROM events WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", DbConvert.ToText(id));
         await cmd.ExecuteNonQueryAsync(ct);

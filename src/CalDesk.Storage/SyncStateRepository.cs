@@ -13,8 +13,8 @@ internal sealed class SyncStateRepository : ISyncStateRepository
     /// When inserting a fresh row, ctag is left null until <see cref="SaveCtagAsync"/> writes one.</summary>
     public async Task UpsertSyncTokenAsync(Guid calendarId, string? syncToken, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             INSERT INTO sync_state (calendar_id, sync_token, ctag)
             VALUES (@calendar_id, @sync_token, NULL)
@@ -28,8 +28,8 @@ internal sealed class SyncStateRepository : ISyncStateRepository
 
     public async Task<string?> GetSyncTokenAsync(Guid calendarId, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = "SELECT sync_token FROM sync_state WHERE calendar_id = @calendar_id";
         cmd.Parameters.AddWithValue("@calendar_id", DbConvert.ToText(calendarId));
         var result = await cmd.ExecuteScalarAsync(ct);
@@ -38,8 +38,8 @@ internal sealed class SyncStateRepository : ISyncStateRepository
 
     public async Task SaveCtagAsync(Guid calendarId, string? ctag, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             INSERT INTO sync_state (calendar_id, sync_token, ctag)
             VALUES (@calendar_id, NULL, @ctag)
@@ -53,8 +53,8 @@ internal sealed class SyncStateRepository : ISyncStateRepository
 
     public async Task<string?> GetCtagAsync(Guid calendarId, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = "SELECT ctag FROM sync_state WHERE calendar_id = @calendar_id";
         cmd.Parameters.AddWithValue("@calendar_id", DbConvert.ToText(calendarId));
         var result = await cmd.ExecuteScalarAsync(ct);

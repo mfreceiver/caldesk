@@ -12,8 +12,8 @@ internal sealed class AccountRepository : IAccountRepository
 
     public async Task<IReadOnlyList<Account>> GetAllAsync(CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             SELECT id, server_url, username, credential_target, display_name, created_at
             FROM accounts
@@ -31,8 +31,8 @@ internal sealed class AccountRepository : IAccountRepository
 
     public async Task<Account?> GetAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             SELECT id, server_url, username, credential_target, display_name, created_at
             FROM accounts
@@ -48,8 +48,8 @@ internal sealed class AccountRepository : IAccountRepository
 
     public async Task UpsertAsync(Account account, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = """
             INSERT INTO accounts (id, server_url, username, credential_target, display_name, created_at)
             VALUES (@id, @server_url, @username, @credential_target, @display_name, @created_at)
@@ -71,8 +71,8 @@ internal sealed class AccountRepository : IAccountRepository
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        await using var conn = _db.CreateConnection();
-        await using var cmd = conn.CreateCommand();
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
         cmd.CommandText = "DELETE FROM accounts WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", DbConvert.ToText(id));
         await cmd.ExecuteNonQueryAsync(ct);
