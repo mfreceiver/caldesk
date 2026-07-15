@@ -77,4 +77,80 @@ public sealed class CalendarViewServiceTests
         Assert.False(view.HasAny);
         Assert.All(view.Days, d => Assert.True(d.IsEmpty));
     }
+
+    // ---- Month view ----
+
+    private static MonthDay CellAt(MonthView v, int month, int day)
+        => v.Weeks.SelectMany(w => w.Days).First(d => d.Date == new DateOnly(2026, month, day));
+
+    [Fact]
+    public void MonthGrid_AlignsToMonday_AndMarksSpilloverAndToday()
+    {
+        // July 2026: 1st is a Wednesday -> grid opens Mon Jun 29.
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        var svc = new CalendarViewService(new StubExpander());
+
+        var view = svc.BuildMonth(Array.Empty<CalendarEvent>(), calendars, 2026, 7, Tz, Today, Now);
+
+        Assert.Equal("2026年7月", view.Title);
+        Assert.Equal(7, view.WeekdayHeaders.Count);
+        Assert.Equal("周一", view.WeekdayHeaders[0]);
+
+        var first = view.Weeks[0].Days[0];
+        Assert.Equal(new DateOnly(2026, 6, 29), first.Date);  // Monday before Jul 1
+        Assert.False(first.IsInMonth);                        // spillover from June
+        Assert.Equal(29, first.Day);
+
+        var todayCell = CellAt(view, 7, 15);
+        Assert.True(todayCell.IsToday);
+        Assert.True(todayCell.IsInMonth);
+
+        // Weekend flag on a Saturday (Jul 18 2026) and Sunday (Jul 19).
+        Assert.True(CellAt(view, 7, 18).IsWeekend);
+        Assert.True(CellAt(view, 7, 19).IsWeekend);
+        Assert.False(CellAt(view, 7, 16).IsWeekend);
+    }
+
+    [Fact]
+    public void MonthView_DoesNotHidePast_AllDayFirst_PreviewsCapped()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() { Color = "#00f" } };
+        var events = new[]
+        {
+            Ev(1, 9, 0, 10, 0, summary: "EarlyPast", calId: calId),   // Jul 1, before today
+            Ev(20, 0, 0, 0, 0, allDay: true, summary: "AllDay", calId: calId),
+            Ev(20, 8, 0, 9, 0, summary: "T1", calId: calId),
+            Ev(20, 9, 0, 10, 0, summary: "T2", calId: calId),
+            Ev(20, 10, 0, 11, 0, summary: "T3", calId: calId),
+            Ev(20, 11, 0, 12, 0, summary: "T4", calId: calId),
+        };
+        events[1].EndUtc = new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero); // all-day span
+
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildMonth(events, calendars, 2026, 7, Tz, Today, Now);
+
+        // Past NOT hidden (unlike the week view): Jul 1 still shows.
+        Assert.Equal(1, CellAt(view, 7, 1).OccurrenceCount);
+
+        var d20 = CellAt(view, 7, 20);
+        Assert.Equal(5, d20.OccurrenceCount);              // 1 all-day + 4 timed
+        Assert.Equal(3, d20.Preview.Count);                // capped at default PreviewLimit
+        Assert.True(d20.Preview[0].IsAllDay);              // all-day surfaced first
+        Assert.Equal("AllDay", d20.Preview[0].Summary);
+        Assert.Equal("全天", d20.Preview[0].TimeLabel);
+        Assert.Equal("#00f", d20.Preview[0].Color);
+
+        Assert.True(view.HasAny);
+    }
+
+    [Fact]
+    public void EmptyMonthHasNoItems()
+    {
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildMonth(Array.Empty<CalendarEvent>(), new Dictionary<Guid, CalendarInfo>(), 2026, 7, Tz, Today, Now);
+        Assert.False(view.HasAny);
+        Assert.All(view.Weeks.SelectMany(w => w.Days), d => Assert.True(d.IsEmpty));
+    }
 }
