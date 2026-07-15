@@ -179,7 +179,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 
 ## 6. 非功能需求（Non-Functional）
 
-- `NFR-01` **单文件 EXE**：发布产物为一个可执行文件（含依赖），便于分发。
+- `NFR-01` **单文件 EXE（framework-dependent）**：发布产物为一个可执行文件，**不打包运行时**（目标机已预装 .NET 10 桌面运行时），体积小、便于分发。
 - `NFR-02` **启动快**：冷启动到桌面窗口可见 ≤ 2s（目标）。
 - `NFR-03` **低占用**：常驻内存与 CPU 低；同步为后台轻量任务，不阻塞 UI 线程。
 - `NFR-04` **数据安全**：密码绝不明文落盘（见 §10）。
@@ -443,14 +443,31 @@ EventException
 
 ## 14. 针对 radical 自建服务的适配
 
-首发配套服务：`https://radi.vectory.cn:18443/mar/work/`（账号 `mar`，日历 `work`）。适配要点：
+首发配套服务：`https://radi.vectory.cn:18443/mar/work/`（账号 `mar`，日历 `work`，服务端为 **Radicale**）。
 
-1. **直接日历 URL 入口优先**：MVP discovery 可失败兜底为用户给定的完整日历 URL（`FR-103`）。即：直接对该 URL 发 `PROPFIND Depth:1` 校验为日历集合，跳过 principal / home-set 链路，降低首发风险。
-2. **HTTPS + 自签名 / 自建证书**：客户端须处理 TLS 信任（可选「信任此证书」开关，凭证单独保存），避免证书校验失败阻断。
-3. **Basic Auth**：radical 通常使用 HTTP Basic；`Authorization: Basic` 头随每次请求发送。
+### 14.1 已确认能力（连通性自检，2026-07-15）
+
+| 能力 | 状态 | 证据 |
+|---|---|---|
+| `.well-known/caldav` 发现 | ✅ | `PROPFIND` 返回 301 重定向 |
+| 日历集合识别 | ✅ | `resourcetype` 含 `<C:calendar/>` |
+| displayname | ✅ | `工作` |
+| 权限 | ✅ | read / write / all（可 PUT/DELETE） |
+| CalendarServer `getctag` | ✅ | 返回 ctag（廉价变更探测可用） |
+| **WebDAV Sync Collection（`sync-token`）** | ✅ **已支持** | 返回 `http://radicale.org/ns/sync/…` → `FR-507` 可行 |
+| 日历颜色 | ✅ | `#ff5f42ff` |
+| `REPORT calendar-query` + time-range | ✅ | 正确返回本周事件（带 ETag 与完整 iCalendar） |
+| PUT / DELETE / `If-Match`(ETag) | ⏳ 待写测试 | 权限允许；M3 写测试 harness 再验 |
+| TLS | ✅ | Let's Encrypt `*.vectory.cn`，全链下发，`openssl` 验证 `0 (ok)` |
+
+### 14.2 适配要点
+
+1. **直接日历 URL 入口**：首发优先用完整日历 URL（`FR-103`），`well-known` / principal / home-set 链路作为兼容路径。
+2. **TLS**：正规 Let's Encrypt 证书（ECDSA，经 ISRG Root X2 交叉签名），**非自签**；链完整、本机根证书齐全，无需「信任自签」开关。若个别客户端报链错误，多半是其根证书库缺 ISRG Root X1/X2（见 §16 排查）。
+3. **Basic Auth**：`Authorization: Basic` 头随每次请求发送。
 4. **路径形态**：`/<user>/<calendar>/`；资源 `/<user>/<calendar>/<uid>.ics`。`PUT`/`DELETE` 路径据此拼装。
-5. **`sync-collection` 兼容性待确认**：若该服务不支持 WebDAV Sync Collection，长期采用「时间范围 + ETag 轮询」（`FR-504`），不依赖 `sync-token`。
-6. **`calendar-query` / ETag 支持确认**：作为 M1 验收前的连通性自检项（见 ROADMAP M1）。
+5. **增量同步**：服务端**支持 `sync-token`**，可在 M4 直接采用 WebDAV Sync Collection（`FR-507`）做增量；以 `getctag` 作为廉价变更探测。
+6. **时区注意（真实数据）**：该日历同时存在**浮动时间**事件（`DTSTART` 既无 `Z` 也无 `TZID`，如 `20260715T093000`）与 `TZID=Asia/Shanghai` 事件。解析与时间范围换算必须正确处理浮动时间（按本地时间解释），呼应 §12。
 7. **首发只对接该单一服务**：稳定后再扩 Nextcloud / 群晖 / Apple 等兼容性（呼应最终建议）。
 
 ---

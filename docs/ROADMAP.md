@@ -170,7 +170,7 @@
 **目标**：单文件 EXE，可日常使用。
 
 **任务**
-- [ ] 单文件发布（`PublishSingleFile`、裁剪自包含，NFR-01）。
+- [ ] 单文件发布（**framework-dependent**：`PublishSingleFile=true` + `SelfContained=false`，不打包运行时，NFR-01）。命令：`dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true`。
 - [ ] 启动性能（冷启动 ≤ 2s 目标，NFR-02）；后台同步不阻塞 UI（NFR-03）。
 - [ ] 全链路错误处理：网络 / 4xx / 5xx / 超时不崩溃、不损数据（NFR-08）。
 - [ ] 日志与诊断面板（NFR-06）。
