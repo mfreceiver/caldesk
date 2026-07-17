@@ -41,7 +41,7 @@ src/CalDesk.App/bin/Release/<tfm>/win-x64/publish/CalDesk.exe
 1. 启动 `CalDesk.exe`（首次窗口为空属正常，尚未连接账户）。
 2. 托盘图标右键 → **设置**。
 3. 填入：
-   - 服务器：`https://radi.vectory.cn:18443/mar/work/`（或服务器根地址，会自动发现）
+   - 服务器：`https://radi.vectory.cn:18443/`（或服务器根地址，会自动发现）
    - 用户名：`mar`
    - 密码：你的 CalDAV 密码（仅存入 Windows 凭据管理器，不落盘）
 4. 点 **连接并保存** → 自动发现并拉取 `工作 / 个人 / 中国节假日` 日历，开始同步。
