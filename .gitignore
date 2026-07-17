@@ -25,3 +25,8 @@ release/
 
 ## Local / private notes (never commit personal deployment specifics)
 docs/LOCAL.md
+
+# BEGIN oh-my-opencode-slim worktrees
+.slim/worktrees/
+.slim/worktrees.json
+# END oh-my-opencode-slim worktrees
