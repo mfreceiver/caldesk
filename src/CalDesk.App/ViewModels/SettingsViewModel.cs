@@ -27,6 +27,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _serverUrl = string.Empty;
     [ObservableProperty] private string _username = string.Empty;
     [ObservableProperty] private string _password = string.Empty;
+
+    /// <summary>Whether Windows Credential Manager already holds a secret for this account.
+    /// The password box stays empty on open; this flag only drives the UI hint.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PasswordHint))]
+    private bool _hasStoredPassword;
+
+    /// <summary>Hint under the password field: stored vs unset (box left empty keeps the stored secret).</summary>
+    public string PasswordHint => HasStoredPassword
+        ? "已保存密码（留空保持不变）"
+        : "未设置密码";
+
     [ObservableProperty] private bool _acceptInsecureTls;
     [ObservableProperty] private int _syncIntervalMinutes = 5;
 
@@ -79,6 +91,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         var account = (await _store.Accounts.GetAllAsync()).FirstOrDefault();
         ServerUrl = account?.ServerUrl ?? string.Empty;
         Username = account?.Username ?? string.Empty;
+        // Never preload the secret into the form (security). Only surface whether one is stored.
+        Password = string.Empty;
+        HasStoredPassword = account is not null
+                            && !string.IsNullOrEmpty(account.CredentialTarget)
+                            && await _credentials.ExistsAsync(account.CredentialTarget);
 
         AcceptInsecureTls = _settings.AcceptInsecureTls;
         SyncIntervalMinutes = _settings.SyncIntervalMinutes;
@@ -135,9 +152,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             _settings.AcceptInsecureTls = AcceptInsecureTls;
 
             var account = await GetFormAccountAsync();
+            // Only write when the box has a new value; empty means keep the stored secret.
             if (!string.IsNullOrEmpty(Password))
             {
                 await _credentials.SetPasswordAsync(account.CredentialTarget, Password);
+                HasStoredPassword = true;
             }
 
             await using var client = await CreateClientForDiscoveryAsync(account);
@@ -169,9 +188,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             var account = await GetFormAccountAsync();
             await _store.Accounts.UpsertAsync(account);
 
+            // Only write when the box has a new value; empty means keep the stored secret.
             if (!string.IsNullOrEmpty(Password))
             {
                 await _credentials.SetPasswordAsync(account.CredentialTarget, Password);
+                HasStoredPassword = true;
             }
 
             _settings.AcceptInsecureTls = AcceptInsecureTls;
@@ -219,6 +240,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Saves the non-account properties (window, defaults, autostart) and closes.</summary>
+    /// <remarks>
+    /// Credentials are written only from <see cref="SaveAccountAsync"/> / <see cref="TestConnectionAsync"/>,
+    /// and only when <see cref="Password"/> is non-empty. This method never touches
+    /// <see cref="ICredentialStore"/> so an empty password box cannot clobber a stored secret.
+    /// </remarks>
     [RelayCommand]
     private void SaveProperties()
     {
