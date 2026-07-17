@@ -1,6 +1,8 @@
 using System.IO;
+using CalDesk.App.Diagnostics;
 using CalDesk.App.Models;
 using CalDesk.App.Services;
+using CalDesk.CalDav;
 using CalDesk.Core.Models;
 using CalDesk.Core.Services;
 using CalDesk.Storage;
@@ -138,7 +140,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 await _credentials.SetPasswordAsync(account.CredentialTarget, Password);
             }
 
-            await using var client = await _factory.CreateAsync(account);
+            await using var client = await CreateClientForDiscoveryAsync(account);
             var discovered = await client.DiscoverCalendarsAsync();
             StatusText = $"连接成功，发现 {discovered.Count} 个日历";
         }
@@ -177,7 +179,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             _settingsService.Save(_settings);
 
             // Discover & merge calendars (preserve selection / ordering).
-            await using var client = await _factory.CreateAsync(account);
+            await using var client = await CreateClientForDiscoveryAsync(account);
             var discovered = await client.DiscoverCalendarsAsync();
             var existing = (await _store.Calendars.GetAllAsync()).ToDictionary(c => c.RemoteUrl);
             foreach (var remote in discovered)
@@ -241,5 +243,17 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         var module = System.Diagnostics.Process.GetCurrentProcess().MainModule;
         return module?.FileName ?? Environment.ProcessPath ?? "CalDesk.exe";
+    }
+
+    /// <summary>Create a CalDAV client for discovery, wiring a step logger into
+    /// <c>%AppData%\CalDesk\caldesk.log</c> when the concrete factory is available.</summary>
+    private Task<ICalDavClient> CreateClientForDiscoveryAsync(Account account)
+    {
+        if (_factory is CalDavClientFactory concrete)
+        {
+            return concrete.CreateAsync(account, StartupLog.Log);
+        }
+
+        return _factory.CreateAsync(account);
     }
 }
