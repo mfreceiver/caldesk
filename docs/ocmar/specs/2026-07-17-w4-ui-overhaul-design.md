@@ -87,7 +87,7 @@
 **实现：**
 - 复用现有 `ICalendarRepository`；若缺 `UpdateAsync(CalendarInfo)` 或批量更新，则新增（实现时确认 schema：`IsSelected`/`Color` 列已存在，无需迁移）。
 - 服务端下发的 `Color` 作为**初始值**；用户覆盖后以用户值为准并持久化。下次发现（discovery）不覆盖用户已设的 `Color`/`IsSelected`（仅回填缺失）。
-- 16 色板（见 §6）作为用户可选预设；存储仍为 `#rrggbb` 字符串。
+- 12 色板（见 §4）作为用户可选预设；存储仍为 `#rrggbb` 字符串。
 
 ---
 
