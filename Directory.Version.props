@@ -1,0 +1,70 @@
+<Project>
+  <!--
+    Git-sourced versioning: the "go-around" pattern, ported from ocdroid. See docs/VERSIONING.md.
+    NO version is hand-maintained; everything is derived from git at build time, so editing
+    a Version property anywhere is pointless (overwritten on every build).
+
+    InformationalVersion / Version / PackageVersion  =  `git describe` output (tags, always,
+    dirty), with a leading 'v' stripped. Always carries a commit anchor: "0.1.0" at a tag,
+    "0.1.0.3.gabc1234" after it, "abc1234" with no tags, a "dirty" suffix on an unclean tree,
+    "0.0.0.dev" off-repo.
+    AssemblyVersion  =  major.minor.0.0      (conservative CLR identity, from the tag)
+    FileVersion      =  major.minor.patch.N  (N = git rev-list count HEAD, monotonic)
+
+    Release: scripts/release.sh passes ReleaseVersion=newTag so the tag portion is the
+    about-to-be-created tag (otherwise describe would still name the previous tag).
+    Rebuilding after a tag without ReleaseVersion yields a shippable, traceable tag+hash
+    build under the same version family (higher commit count, Windows sees a newer file).
+
+    Hard rules: do not hand-edit versions; do not `git tag` manually for releases.
+  -->
+  <Target Name="GitDeriveVersion"
+          BeforeTargets="PrepareForBuild;GenerateAssemblyInfo"
+          Condition="'$(GitDeriveVersionDone)' != 'true'">
+
+    <Exec Command="git describe --tags --always --dirty" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitDescribe" />
+    </Exec>
+    <Exec Command="git rev-list --count HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitCountRaw" />
+    </Exec>
+    <Exec Command="git describe --tags --abbrev=0" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_NearestTag" />
+    </Exec>
+
+    <PropertyGroup>
+      <_GitDescribe Condition="'$(_GitDescribe)' != ''">$(_GitDescribe.Trim())</_GitDescribe>
+      <_Count Condition="'$(_GitCountRaw)' != ''">$(_GitCountRaw.Trim())</_Count>
+      <_Count Condition="'$(_Count)' == ''">0</_Count>
+
+      <!-- Release override: tag portion becomes the about-to-be-created tag (clean, no hash). -->
+      <_Describe Condition="'$(ReleaseVersion)' != ''">$(ReleaseVersion)</_Describe>
+      <_Describe Condition="'$(ReleaseVersion)' == '' AND '$(_GitDescribe)' != ''">$(_GitDescribe)</_Describe>
+
+      <!-- Version string = describe with a leading 'v' stripped; "0.0.0-dev" when not a git repo. -->
+      <_VersionStr Condition="'$(_Describe)' != ''">$([System.Text.RegularExpressions.Regex]::Replace($(_Describe), '^v', ''))</_VersionStr>
+      <_VersionStr Condition="'$(_VersionStr)' == ''">0.0.0-dev</_VersionStr>
+
+      <!-- Numeric major/minor/patch from the nearest clean tag (or the release override). -->
+      <_Tag Condition="'$(ReleaseVersion)' != ''">$(ReleaseVersion)</_Tag>
+      <_Tag Condition="'$(_Tag)' == ''">$(_NearestTag)</_Tag>
+      <_Tag Condition="'$(_Tag)' != ''">$([System.Text.RegularExpressions.Regex]::Replace($(_Tag.Trim()), '^v', ''))</_Tag>
+
+      <_Major>$([System.Text.RegularExpressions.Regex]::Match($(_Tag), '^(\d+)').Groups[1].Value)</_Major>
+      <_Major Condition="'$(_Major)' == ''">0</_Major>
+      <_Minor>$([System.Text.RegularExpressions.Regex]::Match($(_Tag), '^\d+\.(\d+)').Groups[1].Value)</_Minor>
+      <_Minor Condition="'$(_Minor)' == ''">0</_Minor>
+      <_Patch>$([System.Text.RegularExpressions.Regex]::Match($(_Tag), '^\d+\.\d+\.(\d+)').Groups[1].Value)</_Patch>
+      <_Patch Condition="'$(_Patch)' == ''">0</_Patch>
+
+      <InformationalVersion>$(_VersionStr)</InformationalVersion>
+      <Version>$(_VersionStr)</Version>
+      <PackageVersion>$(_VersionStr)</PackageVersion>
+      <AssemblyVersion>$(_Major).$(_Minor).0.0</AssemblyVersion>
+      <FileVersion>$(_Major).$(_Minor).$(_Patch).$(_Count)</FileVersion>
+      <GitDeriveVersionDone>true</GitDeriveVersionDone>
+    </PropertyGroup>
+
+    <Message Text="CalDesk version: $(_VersionStr)  (assembly $(_Major).$(_Minor).0.0, file $(_Major).$(_Minor).$(_Patch).$(_Count))" Importance="high" />
+  </Target>
+</Project>
