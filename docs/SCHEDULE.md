@@ -11,7 +11,7 @@
 - **总工时估计**：约 **20–24 人日**（≈ 4–5 周专注开发），含联调与手测。
 - **关键路径**：`M0 → M1 → M2 → M3 → M4 → M5 → M7`，`M6`（重复+提醒）可在 M5 期部分并行。
 - **双轨道**：
-  - **Linux 轨**（本机，持续可推进 + 可对 radical 跑集成测试）：`CalDav` / `Storage` / `Core` 逻辑、`Recurrence`、同步引擎、单测。
+  - **Linux 轨**（本机，持续可推进 + 可对 Radicale 跑集成测试）：`CalDav` / `Storage` / `Core` 逻辑、`Recurrence`、同步引擎、单测。
   - **Windows 轨**（你的 Windows 机，集中突击）：WPF `App`（视图/窗口/托盘/开机启动/发布）。
 - **节奏建议**：阶段 A、B 的**业务逻辑 90% 可在 Linux 完成并通过自动化测试**，Windows 仅在每阶段末做 UI 集成突击。这能把「必须切到 Windows」的次数降到 3–4 次。
 
@@ -20,7 +20,7 @@
 ## 二、三个宏阶段
 
 ### 阶段 A —— 连通与地基（M0 + M1）
-> 目标：能从 radical 读出真实事件并落库。
+> 目标：能从 Radicale 读出真实事件并落库。
 
 - 覆盖：解决方案骨架 + CalDAV 发现/查询 + 时区处理 + 落库。
 - **门槛（Definition of Done）**：本机对 `work`/`personal`/`holiday` 三日历跑通 `calendar-query`，事件（含浮动时间）正确入库，ETag/`remote_href` 完整。
@@ -47,7 +47,7 @@
 | 里程碑 | 主题 | 工时 | 依赖 | 主轨道 | 关键产出 / 验收门槛 |
 |---|---|---|---|---|---|
 | **M0** | 工程地基 | 1d | — | 双 | 五项目骨架；`dotnet build`/`test` 绿；分层依赖正确 |
-| **M1** | CalDAV 连通 | 3d | M0 | Linux | 发现 + 完整URL兜底 + `calendar-query` + 时区；对 radical 三日历跑通自检 |
+| **M1** | CalDAV 连通 | 3d | M0 | Linux | 发现 + 完整URL兜底 + `calendar-query` + 时区；对 Radicale 三日历跑通自检 |
 | **M2** | 缓存 + 周视图（只读） | 3d | M1 | Linux(逻辑)/Win(视图) | SQLite schema + Repository + 周视图VM/View；离线可见；重复展开显示 |
 | **M3** | 增删改 + 乐观并发 | 3d | M2 | Linux(协议)/Win(窗口) | 快速新增窗口 + PUT/DELETE + `If-Match`；本地优先写；保留 `X-` 属性 |
 | **M4** | 同步引擎 | 3d | M3 | Linux | 定时/手动同步 + `sync-token` 增量 + ETag比较 + 冲突提示 + 失败警告 |
@@ -123,14 +123,14 @@
 | WorkerW（G5-22） | 非公开技巧，系统更新易失效 | MVP 不做，普通无边框+锁定位置 |
 | 浮动时间事件 | 真实数据含无 `Z`/`TZID` 事件，解析错误会错位 | M1 即严格按本地时间解释浮动时间 |
 | 发布体积（G0-1） | framework-dependent 单文件，需目标机预装运行时 | 已确认目标机有运行时；安装文档需注明依赖 |
-| CardDAV 通讯录 | `/mar/contact/` 会被枚举到 | 按 `resourcetype` 过滤，仅取 `<C:calendar/>` |
+| CardDAV 通讯录 | `/user/contact/` 会被枚举到 | 按 `resourcetype` 过滤，仅取 `<C:calendar/>` |
 
 ---
 
 ## 六、推进规则（每里程碑 Definition of Done）
 
 - 每个里程碑结束须满足其「验收门槛」+ 该里程碑相关单测/集成测试通过。
-- **以 radical 三日历真实数据为通过线**：稳定后再扩其它服务器兼容。
+- **以 Radicale 服务器三日历真实数据为通过线**：稳定后再扩其它服务器兼容。
 - 每动 SQLite schema / CalDAV 请求 / 重复逻辑 → 重跑对应里程碑验收。
 - 阶段 A/B 的 Linux 侧测试先行；Windows 视图集成在阶段末突击，减少环境切换。
 

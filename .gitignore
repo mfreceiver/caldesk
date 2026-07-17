@@ -19,3 +19,6 @@
 appsettings.*.local.json
 .env
 secrets.json
+
+## Local / private notes (never commit personal deployment specifics)
+docs/LOCAL.md

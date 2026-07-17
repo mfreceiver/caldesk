@@ -1,7 +1,7 @@
 # CalDesk 实现路线图
 
 > 由 [REQUIREMENTS.md](./REQUIREMENTS.md) 派生。需求 ID（`FR-xxx` / `NFR-xx`）可在该文档追溯。
-> 基线策略：先针对首发服务（radical `https://radi.vectory.cn:18443/mar/work/`）打通 discovery / 查询 / PUT / DELETE / ETag 冲突，稳定后再扩兼容。
+> 基线策略：先针对首发服务（Radicale `https://your-caldav-server.example/path/`）打通 discovery / 查询 / PUT / DELETE / ETag 冲突，稳定后再扩兼容。
 
 ---
 
@@ -42,7 +42,7 @@
 
 ## M1 — CalDAV 连通（首发核心）
 
-**目标**：能与 radical 拉通一次，把本周事件拉下来并落库（带 ETag）。
+**目标**：能与 Radicale 拉通一次，把本周事件拉下来并落库（带 ETag）。
 
 **任务**
 - [ ] `HttpClient` 封装：BaseAddress、Basic Auth、超时、TLS 信任开关（自建证书，见 §14）、统一错误包装。
@@ -51,10 +51,10 @@
 - [ ] 读取日历名称 / 颜色 / 权限（`FR-104`）。
 - [ ] `REPORT calendar-query` + time-range，**以系统时区换算 UTC**（`FR-504`，§9.2）。
 - [ ] 解析响应：`getetag` + `calendar-data`，落 `calendars` / `events`（保留完整 `icalendar_data`）。
-- [ ] 连通性自检脚本 / 集成测试：对 `radi.vectory.cn:18443/mar/work/` 跑通。
+- [ ] 连通性自检脚本 / 集成测试：对 `your-caldav-server.example/path/` 跑通。
 
 **验收**
-- 连一次 radical，能枚举出 `work` 日历并取回本周事件。
+- 连一次 Radicale，能枚举出 `work` 日历并取回本周事件。
 - ETag、`remote_href`、`start/end_utc`、`is_all_day` 正确入库。
 - 时区边界（含全天事项日期边界）无错位。
 
@@ -112,7 +112,7 @@
 - [ ] 远端 → 本地：`href + ETag` 比较，按变化更新（`FR-504`）。
 - [ ] 冲突处理：本地已改 + 远端也变 → 创建冲突副本并提示用户选择（**不 LWW**，`FR-505`，§11.4）。
 - [ ] 失败 UI 警告（同步状态角标 / 托盘提示，`FR-506`）。
-- [ ] 决策并记录 `sync-token` 策略：若 radical 支持 → 第二版增量；否则长期 ETag 轮询（`FR-507` 评估）。
+- [ ] 决策并记录 `sync-token` 策略：若 Radicale 支持 → 第二版增量；否则长期 ETag 轮询（`FR-507` 评估）。
 
 **验收**
 - 手机端改一个事件，5 分钟内桌面视图更新。
@@ -177,7 +177,7 @@
 - [ ] 安装 / 升级体验（便携优先），卸载清理凭据引用。
 
 **验收**
-- 单 EXE 在干净 Windows 10/11 上运行；连接 radical、查看、新增、编辑、删除、提醒、托盘、开机启动全通。
+- 单 EXE 在干净 Windows 10/11 上运行；连接 Radicale、查看、新增、编辑、删除、提醒、托盘、开机启动全通。
 - 断网/恢复、并发冲突、重复事件三类场景手测通过。
 
 ---
@@ -185,7 +185,7 @@
 ## 跨里程碑的验证原则
 
 - **优先窄验证**：每个里程碑只验证该里程碑的可观察行为（M1=拉取正确、M3=回写不丢字段、M4=冲突不丢数据）。
-- **首发服务器为准**：兼容性以 radical 通过为门槛；其它服务器兼容留到稳定后。
+- **首发服务器为准**：兼容性以 Radicale 通过为门槛；其它服务器兼容留到稳定后。
 - **回归点**：每次改动 SQLite schema / CalDAV 请求 / 重复逻辑后，重跑对应里程碑的验收脚本。
 - **不做**：未到 M7 不做全量性能压测；未确认 `sync-collection` 支持前不依赖 `sync-token`。
 

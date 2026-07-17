@@ -55,8 +55,8 @@ dotnet publish src/CalDesk.App/CalDesk.App.csproj `
 ## 6. 运行与冒烟验证
 1. 运行 `CalDesk.exe`（首次窗口为空属正常，尚未连接账户）。
 2. 托盘右键 → **设置**：
-   - 服务器：`https://radi.vectory.cn:18443/mar/work/`
-   - 用户名：`mar`　密码：`Ap337kzwKsk2vmBo`
+   - 服务器：`https://your-caldav-server.example/path/`
+   - 用户名：`<your-caldav-user>`　密码：`<your-caldav-password>`
    - 点 **连接并保存** → 应自动发现并拉取「工作 / 个人 / 中国节假日」三个日历。
 3. 逐项验证（OK / 失败）：
    - 周视图显示事件、进行中事件高亮、过去事件隐藏。

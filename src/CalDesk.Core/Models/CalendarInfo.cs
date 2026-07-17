@@ -7,7 +7,7 @@ public sealed class CalendarInfo
 
     public Guid AccountId { get; set; }
 
-    /// <summary>Full URL of the calendar collection, e.g. <c>https://host/mar/work/</c>.</summary>
+    /// <summary>Full URL of the calendar collection, e.g. <c>https://host/user/work/</c>.</summary>
     public string RemoteUrl { get; set; } = string.Empty;
 
     public string DisplayName { get; set; } = string.Empty;

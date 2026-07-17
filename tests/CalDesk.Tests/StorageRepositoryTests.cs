@@ -41,7 +41,7 @@ public sealed class StorageRepositoryTests
         {
             Id = calendarId,
             AccountId = accountId,
-            RemoteUrl = $"https://example.caldav/mar/{calendarId:N}/",
+            RemoteUrl = $"https://example.caldav/user/{calendarId:N}/",
             DisplayName = "Work",
             UpdatedAt = DateTimeOffset.UtcNow,
         });
@@ -128,7 +128,7 @@ public sealed class StorageRepositoryTests
             {
                 Id = calendarId,
                 AccountId = accountId,
-                RemoteUrl = "https://example.caldav/mar/work/",
+                RemoteUrl = "https://example.caldav/user/work/",
                 DisplayName = "Work",
                 Color = "#aabbcc",
                 SortOrder = 1,
@@ -154,7 +154,7 @@ public sealed class StorageRepositoryTests
                 Id = Guid.NewGuid(),
                 CalendarId = calendarId,
                 Uid = "evt-1@example",
-                RemoteHref = "/mar/work/evt-1.ics",
+                RemoteHref = "/user/work/evt-1.ics",
                 ETag = "\"v1\"",
                 ICalendarData = "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
                 Summary = "Standup",
@@ -179,7 +179,7 @@ public sealed class StorageRepositoryTests
                 Id = Guid.NewGuid(),
                 CalendarId = calendarId,
                 Uid = "evt-recur@example",
-                RemoteHref = "/mar/work/evt-recur.ics",
+                RemoteHref = "/user/work/evt-recur.ics",
                 ETag = null,
                 ICalendarData = "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
                 Summary = "Weekly review",
@@ -209,7 +209,7 @@ public sealed class StorageRepositoryTests
             Assert.Equal(evtEnd, fetched.EndUtc);
             Assert.Equal("Room 42", fetched.Location);
             Assert.Equal("\"v1\"", fetched.ETag);
-            Assert.Equal("/mar/work/evt-1.ics", fetched.RemoteHref);
+            Assert.Equal("/user/work/evt-1.ics", fetched.RemoteHref);
 
             var inRange = await services.Events.GetInRangeAsync(new[] { calendarId }, rangeStart, rangeEnd);
             Assert.Equal(2, inRange.Count);
@@ -230,7 +230,7 @@ public sealed class StorageRepositoryTests
             Assert.NotNull(byUid);
             Assert.Equal(evt.Id, byUid!.Id);
 
-            var byHref = await services.Events.FindByRemoteHrefAsync("/mar/work/evt-recur.ics");
+            var byHref = await services.Events.FindByRemoteHrefAsync("/user/work/evt-recur.ics");
             Assert.NotNull(byHref);
             Assert.Equal(recurring.Id, byHref!.Id);
 

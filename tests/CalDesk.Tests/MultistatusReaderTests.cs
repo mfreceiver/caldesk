@@ -22,7 +22,7 @@ public sealed class MultistatusReaderTests
         // Sync-collection deletion marker: response-level <status>404</status>, separate from propstat.
         var xml = Wrap("""
             <d:response>
-              <d:href>/mar/work/abc.ics</d:href>
+              <d:href>/user/work/abc.ics</d:href>
               <d:status>HTTP/1.1 404 Not Found</d:status>
               <d:propstat>
                 <d:status>HTTP/1.1 404 Not Found</d:status>
@@ -34,7 +34,7 @@ public sealed class MultistatusReaderTests
         var ms = CalDav.Dav.MultistatusReader.Read(xml);
 
         var r = Assert.Single(ms.Responses);
-        Assert.Equal("/mar/work/abc.ics", r.Href);
+        Assert.Equal("/user/work/abc.ics", r.Href);
         Assert.True(r.IsNotFound);
     }
 
@@ -43,7 +43,7 @@ public sealed class MultistatusReaderTests
     {
         var xml = Wrap("""
             <d:response>
-              <d:href>/mar/work/gone.ics</d:href>
+              <d:href>/user/work/gone.ics</d:href>
               <d:status>HTTP/1.1 410 Gone</d:status>
             </d:response>
             """);
@@ -60,7 +60,7 @@ public sealed class MultistatusReaderTests
         var xml = Wrap(
             $"""
             <d:response>
-              <d:href>/mar/work/x.ics</d:href>
+              <d:href>/user/work/x.ics</d:href>
               <d:propstat>
                 <d:status>HTTP/1.1 200 OK</d:status>
                 <d:prop>
@@ -89,7 +89,7 @@ public sealed class MultistatusReaderTests
         var xml = Wrap(
             $"""
             <d:response>
-              <d:href>/mar/work/mixed.ics</d:href>
+              <d:href>/user/work/mixed.ics</d:href>
               <d:propstat>
                 <d:status>HTTP/1.1 200 OK</d:status>
                 <d:prop>

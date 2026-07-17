@@ -6,7 +6,7 @@ public sealed class Account
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    /// <summary>Server base URL as entered by the user, e.g. <c>https://radi.vectory.cn:18443</c>.</summary>
+    /// <summary>Server base URL as entered by the user, e.g. <c>https://your-caldav-server.example</c>.</summary>
     public string ServerUrl { get; set; } = string.Empty;
 
     /// <summary>CalDAV user name.</summary>

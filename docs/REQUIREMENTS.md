@@ -9,7 +9,7 @@
 
 - **项目命名**：统一使用 **CalDesk**（`Cal`endar + `Desk`）。命名空间 / 程序集 / 文件夹 / EXE 均沿用：`CalDesk.App`、`CalDesk.Core`、`CalDesk.CalDav`、`CalDesk.Storage`、`CalDesk.Tests`、`CalDesk.exe`。
 - **目标运行环境**：Windows 10/11 桌面，.NET 10。
-- **首发配套服务**：自建 CalDAV（radical），日历地址 `https://radi.vectory.cn:18443/mar/work/`，账号 `mar`。
+- **首发配套服务**：自建 CalDAV（Radicale），日历地址 `https://your-caldav-server.example/path/`，账号 `<your-caldav-user>`。
 - **文档关系**：本文是「做什么 / 为什么 / 约束是什么」；逐步「怎么做 / 何时做」见 [ROADMAP.md](./ROADMAP.md)。
 
 ---
@@ -29,7 +29,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 
 ## 2. 目标用户与使用场景
 
-- **主用户**：单人 / 小团队，已自建 CalDAV（radical），需要桌面常驻视图。
+- **主用户**：单人 / 小团队，已自建 CalDAV（Radicale），需要桌面常驻视图。
 - **核心场景**：
   1. 工作时余光扫到本周待办，无需打开浏览器或日历 App。
   2. 临时想起一件事 → 点 `＋` 或托盘 → 30 秒内录入并同步。
@@ -119,7 +119,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 ### 5.1 连接与发现
 - `FR-101` ✅ 添加单个 CalDAV 账户（服务器、用户名、密码）。
 - `FR-102` ✅ 自动发现：principal URL → calendar-home-set → 枚举日历集合。
-- `FR-103` ✅ 兼容用户直接输入完整日历 URL（如 `…/mar/work/`）的兜底路径。
+- `FR-103` ✅ 兼容用户直接输入完整日历 URL（如 `…/<your-caldav-user>/work/`）的兜底路径。
 - `FR-104` ✅ 读取并展示日历名称、颜色、权限。
 - `FR-105` ✅ 凭据保存于 Windows Credential Locker，SQLite 仅存引用。
 - `FR-106` ⏸ 多账户合并视图。
@@ -309,7 +309,7 @@ END:VCALENDAR
 ```
 
 ```http
-PUT /calendars/mar/work/0f52ef1d.ics
+PUT /calendars/<your-caldav-user>/work/0f52ef1d.ics
 Content-Type: text/calendar; charset=utf-8
 If-None-Match: *
 ```
@@ -395,7 +395,7 @@ created_at
 
 - **第一版（MVP）**：查询「过去 30 天 ~ 未来 180 天」范围；比较 `href + ETag`；每 5 分钟同步；手动刷新立即同步。
 - **第二版**：WebDAV Sync Collection（`sync-token` 增量），仅获取新增 / 修改 / 删除资源，降低大型日历开销。
-  > ⚠️ 须先确认首发服务器（radical）是否支持 `sync-collection`；不支持则长期沿用 ETag 轮询。
+  > ⚠️ 须先确认首发服务器（Radicale）是否支持 `sync-collection`；不支持则长期沿用 ETag 轮询。
 
 ### 11.4 冲突处理
 
@@ -441,9 +441,9 @@ EventException
 
 ---
 
-## 14. 针对 radical 自建服务的适配
+## 14. 针对 Radicale 自建服务的适配
 
-首发配套服务：`https://radi.vectory.cn:18443/mar/work/`（账号 `mar`，日历 `work`，服务端为 **Radicale**）。
+首发配套服务：`https://your-caldav-server.example/path/`（账号 `<your-caldav-user>`，日历 `work`，服务端为 **Radicale**）。
 
 ### 14.1 已确认能力（连通性自检，2026-07-15）
 
@@ -458,7 +458,7 @@ EventException
 | 日历颜色 | ✅ | `#ff5f42ff` |
 | `REPORT calendar-query` + time-range | ✅ | 正确返回本周事件（带 ETag 与完整 iCalendar） |
 | PUT / DELETE / `If-Match`(ETag) | ⏳ 待写测试 | 权限允许；M3 写测试 harness 再验 |
-| TLS | ✅ | Let's Encrypt `*.vectory.cn`，全链下发，`openssl` 验证 `0 (ok)` |
+| TLS | ✅ | 正规 CA 签发证书（如 Let's Encrypt），全链下发，`openssl` 验证 `0 (ok)` |
 
 ### 14.2 适配要点
 
@@ -503,7 +503,7 @@ EventException
 | 重复事件复杂度 | RRULE/EXDATE/RECURRENCE-ID 组合爆炸 | MVP 收窄范围，内部模型区分 Series/Occurrence/Exception |
 | 时区 / 夏令时 | 直接拼 UTC 会出错 | 以系统时区为基准做范围换算（§9.2） |
 | 扩展字段丢失 | 解析—回写循环可能丢 `X-` 属性 | 保留完整 `icalendar_data`，编辑时尽量原地修改（§11.2） |
-| radical 兼容性 | 自建服务特性差异 | 首发只对接该服务；M1 做连通性自检（§14） |
+| Radicale 兼容性 | 自建服务特性差异 | 首发只对接该服务；M1 做连通性自检（§14） |
 
 ---
 
@@ -511,4 +511,4 @@ EventException
 
 > **C# + WPF 做桌面外壳，SQLite 做本地优先缓存，Ical.Net 处理 iCalendar，自行实现精简 CalDAV 客户端。**
 
-不从完整 RFC 覆盖开始。先针对实际使用的服务器（radical）完成 discovery、查询、PUT、DELETE 和 ETag 冲突控制；稳定之后再扩大兼容范围。具体里程碑与验收见 [ROADMAP.md](./ROADMAP.md)。
+不从完整 RFC 覆盖开始。先针对实际使用的服务器（Radicale）完成 discovery、查询、PUT、DELETE 和 ETag 冲突控制；稳定之后再扩大兼容范围。具体里程碑与验收见 [ROADMAP.md](./ROADMAP.md)。

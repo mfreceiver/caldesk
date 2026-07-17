@@ -13,7 +13,7 @@ public sealed class CalendarEvent
     /// <summary>The stable iCalendar UID of the VEVENT.</summary>
     public string Uid { get; set; } = string.Empty;
 
-    /// <summary>Server resource href, e.g. <c>/mar/work/&lt;uid&gt;.ics</c>.</summary>
+    /// <summary>Server resource href, e.g. <c>/user/work/&lt;uid&gt;.ics</c>.</summary>
     public string? RemoteHref { get; set; }
 
     /// <summary>Last known ETag from the server (for optimistic concurrency).</summary>

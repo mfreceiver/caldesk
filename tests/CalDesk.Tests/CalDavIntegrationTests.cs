@@ -48,7 +48,7 @@ public sealed class CalDavIntegrationTests
 
         Assert.NotEmpty(calendars);
         Assert.Contains(calendars, c => c.RemoteUrl.Contains("/work/", StringComparison.OrdinalIgnoreCase));
-        // The CardDAV addressbook (/mar/contact/) must be filtered out.
+        // The CardDAV addressbook (/user/contact/) must be filtered out.
         Assert.DoesNotContain(calendars, c => c.RemoteUrl.Contains("/contact", StringComparison.OrdinalIgnoreCase));
     }
 
