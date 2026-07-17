@@ -7,194 +7,270 @@
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:QuickAddViewModel}"
         Title="新增 / 编辑事项" Width="380" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False"
         FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
     </Window.Resources>
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
 
-        <!-- 标题 -->
-        <Grid Grid.Row="0" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="标题" VerticalAlignment="Center" Opacity="0.7" />
-            <TextBox Grid.Column="1" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
+    <!-- Card surface: matches the main windows (WeekWindow/MonthWindow) —
+         borderless, transparent, rounded #F4FFFFFF card + soft drop shadow. -->
+    <Border Background="#F4FFFFFF" CornerRadius="10" Padding="16"
+            TextOptions.TextFormattingMode="Display"
+            TextOptions.TextRenderingMode="Auto">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" Color="Black" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- 0: title / drag row + close button -->
+                <RowDefinition Height="Auto" />
+                <!-- 1: 标题 -->
+                <RowDefinition Height="Auto" />
+                <!-- 2: 开始时间 -->
+                <RowDefinition Height="Auto" />
+                <!-- 3: 结束时间 -->
+                <RowDefinition Height="Auto" />
+                <!-- 4: 地点 -->
+                <RowDefinition Height="Auto" />
+                <!-- 5: 日历 -->
+                <RowDefinition Height="Auto" />
+                <!-- 6: 提醒 -->
+                <RowDefinition Height="Auto" />
+                <!-- 7: 重复（高级） -->
+                <RowDefinition Height="Auto" />
+                <!-- 8: 更多选项 -->
+                <RowDefinition Height="Auto" />
+                <!-- 9: 错误 -->
+                <RowDefinition Height="Auto" />
+                <!-- 10: 底部按钮栏 -->
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Title / drag row: drag area (left) + × close (right). The drag
+                 area is the empty Grid background — clicking anywhere on the
+                 row (other than the close button) initiates DragMove. -->
+            <Grid Grid.Row="0" Margin="0,0,0,12" MouseLeftButtonDown="OnDrag">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="事项"
+                           FontSize="{DynamicResource FontHeader}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="×"
+                        Style="{StaticResource CardGhostButton}"
+                        Foreground="#FF6B7280"
+                        FontSize="{DynamicResource FontHeader}"
+                        Padding="8,2"
+                        VerticalAlignment="Center"
+                        ToolTip="关闭"
+                        IsCancel="True"
+                        Click="OnClose" />
+            </Grid>
+
+            <!-- 标题 -->
+            <Grid Grid.Row="1" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="标题" VerticalAlignment="Center" Opacity="0.7" />
+                <TextBox Grid.Column="1"
+                         Style="{StaticResource CardTextBox}"
+                         Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />
+            </Grid>
+
+            <!-- 开始：日期始终可见；时间仅非全天 -->
+            <Grid Grid.Row="2" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="开始时间" VerticalAlignment="Center" Opacity="0.7" />
+                <DatePicker Grid.Column="1"
+                            Style="{StaticResource CardDatePicker}"
+                            SelectedDate="{Binding StartDate}"
+                            SelectedDateFormat="Short"
+                            Language="zh-CN"
+                            Margin="0,0,8,0" />
+                <TextBox Grid.Column="2"
+                         Text="{Binding StartTime, UpdateSourceTrigger=PropertyChanged}"
+                         Width="64"
+                         ToolTip="时间：0930 或 09:30"
+                         Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource CardTextBox}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StartTimeInvalid}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderThickness" Value="1.5" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </Grid>
+
+            <!-- 结束：日期始终可见（全天可编辑 EndDate）；时间仅非全天 -->
+            <Grid Grid.Row="3" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="结束时间" VerticalAlignment="Center" Opacity="0.7" />
+                <DatePicker Grid.Column="1"
+                            SelectedDate="{Binding EndDate}"
+                            SelectedDateFormat="Short"
+                            Language="zh-CN"
+                            Margin="0,0,8,0">
+                    <DatePicker.Style>
+                        <Style TargetType="DatePicker" BasedOn="{StaticResource CardDatePicker}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderThickness" Value="1.5" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DatePicker.Style>
+                </DatePicker>
+                <TextBox Grid.Column="2"
+                         Text="{Binding EndTime, UpdateSourceTrigger=PropertyChanged}"
+                         Width="64"
+                         ToolTip="时间：0930 或 09:30"
+                         Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource CardTextBox}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding EndTimeInvalid}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderThickness" Value="1.5" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderThickness" Value="1.5" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </Grid>
+
+            <!-- 地点（始终可见，在日历之上） -->
+            <Grid Grid.Row="4" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="地点" VerticalAlignment="Center" Opacity="0.7" />
+                <TextBox Grid.Column="1"
+                         Style="{StaticResource CardTextBox}"
+                         Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" />
+            </Grid>
+
+            <!-- 日历 -->
+            <Grid Grid.Row="5" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="日历" VerticalAlignment="Center" Opacity="0.7" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding Calendars}"
+                          SelectedItem="{Binding SelectedCalendar}"
+                          DisplayMemberPath="DisplayName">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox" BasedOn="{StaticResource CardComboBox}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CalendarInvalid}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderThickness" Value="1.5" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.Style>
+                </ComboBox>
+            </Grid>
+
+            <!-- 提醒 -->
+            <Grid Grid.Row="6" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="提醒" VerticalAlignment="Center" Opacity="0.7" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <TextBox Style="{StaticResource CardTextBox}"
+                             Text="{Binding ReminderMinutes, UpdateSourceTrigger=PropertyChanged}"
+                             Width="56" />
+                    <TextBlock Text=" 分钟前" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 重复（更多选项内） -->
+            <Grid Grid.Row="7" Margin="0,0,0,8" Visibility="{Binding HasAdvanced, Converter={StaticResource Bool2Vis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="重复" VerticalAlignment="Center" Opacity="0.7" />
+                <ComboBox Grid.Column="1"
+                          Style="{StaticResource CardComboBox}"
+                          ItemsSource="{Binding RepeatOptions}"
+                          SelectedItem="{Binding Repeat}" />
+            </Grid>
+
+            <Button Grid.Row="8" Content="[ 更多选项 ]"
+                    Style="{StaticResource CardGhostButton}"
+                    Command="{Binding MoreCommand}"
+                    Foreground="#FF3B82F6"
+                    HorizontalAlignment="Left"
+                    Margin="64,0,0,8" />
+
+            <!-- 校验错误（非空时显示） -->
+            <TextBlock Grid.Row="9"
+                       Text="{Binding Error}"
+                       Foreground="#FFDC2626"
+                       FontSize="{DynamicResource FontSmall}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,8"
+                       Visibility="{Binding HasError, Converter={StaticResource Bool2Vis}}" />
+
+            <!-- 底部：全天（左下）+ 删除 | 保存 / 取消 -->
+            <Grid Grid.Row="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox Content="全天"
+                              Style="{StaticResource CardCheckBox}"
+                              IsChecked="{Binding IsAllDay}"
+                              Margin="0,0,12,0" />
+                    <Button Content="删除"
+                            Style="{StaticResource CardGhostButton}"
+                            Command="{Binding DeleteCommand}"
+                            Foreground="#FFB91C1C"
+                            Visibility="{Binding IsEditing, Converter={StaticResource Bool2Vis}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="保存"
+                            Style="{StaticResource CardPrimaryButton}"
+                            Command="{Binding SaveCommand}"
+                            Margin="0,0,8,0"
+                            IsDefault="True" />
+                    <Button Content="取消"
+                            Style="{StaticResource CardButton}"
+                            Command="{Binding CancelCommand}"
+                            IsCancel="True" />
+                </StackPanel>
+            </Grid>
         </Grid>
-
-        <!-- 开始：日期始终可见；时间仅非全天 -->
-        <Grid Grid.Row="1" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="开始时间" VerticalAlignment="Center" Opacity="0.7" />
-            <DatePicker Grid.Column="1"
-                        SelectedDate="{Binding StartDate}"
-                        SelectedDateFormat="Short"
-                        Language="zh-CN"
-                        Margin="0,0,8,0" />
-            <TextBox Grid.Column="2"
-                     Text="{Binding StartTime, UpdateSourceTrigger=PropertyChanged}"
-                     Width="64" Padding="4"
-                     ToolTip="时间：0930 或 09:30"
-                     Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
-                <TextBox.Style>
-                    <Style TargetType="TextBox">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding StartTimeInvalid}" Value="True">
-                                <Setter Property="BorderBrush" Value="#DC2626" />
-                                <Setter Property="BorderThickness" Value="1.5" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBox.Style>
-            </TextBox>
-        </Grid>
-
-        <!-- 结束：日期始终可见（全天可编辑 EndDate）；时间仅非全天 -->
-        <Grid Grid.Row="2" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="结束时间" VerticalAlignment="Center" Opacity="0.7" />
-            <DatePicker Grid.Column="1"
-                        SelectedDate="{Binding EndDate}"
-                        SelectedDateFormat="Short"
-                        Language="zh-CN"
-                        Margin="0,0,8,0">
-                <DatePicker.Style>
-                    <Style TargetType="DatePicker">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
-                                <Setter Property="BorderBrush" Value="#DC2626" />
-                                <Setter Property="BorderThickness" Value="1.5" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </DatePicker.Style>
-            </DatePicker>
-            <TextBox Grid.Column="2"
-                     Text="{Binding EndTime, UpdateSourceTrigger=PropertyChanged}"
-                     Width="64" Padding="4"
-                     ToolTip="时间：0930 或 09:30"
-                     Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
-                <TextBox.Style>
-                    <Style TargetType="TextBox">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding EndTimeInvalid}" Value="True">
-                                <Setter Property="BorderBrush" Value="#DC2626" />
-                                <Setter Property="BorderThickness" Value="1.5" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
-                                <Setter Property="BorderBrush" Value="#DC2626" />
-                                <Setter Property="BorderThickness" Value="1.5" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBox.Style>
-            </TextBox>
-        </Grid>
-
-        <!-- 地点（始终可见，在日历之上） -->
-        <Grid Grid.Row="3" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="地点" VerticalAlignment="Center" Opacity="0.7" />
-            <TextBox Grid.Column="1" Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
-        </Grid>
-
-        <!-- 日历 -->
-        <Grid Grid.Row="4" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="日历" VerticalAlignment="Center" Opacity="0.7" />
-            <ComboBox Grid.Column="1" ItemsSource="{Binding Calendars}" SelectedItem="{Binding SelectedCalendar}"
-                      DisplayMemberPath="DisplayName">
-                <ComboBox.Style>
-                    <Style TargetType="ComboBox">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding CalendarInvalid}" Value="True">
-                                <Setter Property="BorderBrush" Value="#DC2626" />
-                                <Setter Property="BorderThickness" Value="1.5" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </ComboBox.Style>
-            </ComboBox>
-        </Grid>
-
-        <!-- 提醒 -->
-        <Grid Grid.Row="5" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="提醒" VerticalAlignment="Center" Opacity="0.7" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <TextBox Text="{Binding ReminderMinutes, UpdateSourceTrigger=PropertyChanged}" Width="56" Padding="4" />
-                <TextBlock Text=" 分钟前" VerticalAlignment="Center" />
-            </StackPanel>
-        </Grid>
-
-        <!-- 重复（更多选项内） -->
-        <Grid Grid.Row="6" Margin="0,0,0,8" Visibility="{Binding HasAdvanced, Converter={StaticResource Bool2Vis}}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="64" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="重复" VerticalAlignment="Center" Opacity="0.7" />
-            <ComboBox Grid.Column="1" ItemsSource="{Binding RepeatOptions}" SelectedItem="{Binding Repeat}" />
-        </Grid>
-
-        <Button Grid.Row="7" Content="[ 更多选项 ]" Command="{Binding MoreCommand}" HorizontalAlignment="Left"
-                Background="Transparent" BorderThickness="0" Foreground="#3B82F6" Cursor="Hand" Margin="64,0,0,8" />
-
-        <!-- 校验错误（非空时显示） -->
-        <TextBlock Grid.Row="8"
-                   Text="{Binding Error}"
-                   Foreground="#DC2626"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,8"
-                   Visibility="{Binding HasError, Converter={StaticResource Bool2Vis}}" />
-
-        <!-- 底部：全天（左下）+ 删除 | 保存 / 取消 -->
-        <Grid Grid.Row="9">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <CheckBox Content="全天" VerticalAlignment="Center" IsChecked="{Binding IsAllDay}" Margin="0,0,12,0" />
-                <Button Content="删除" Command="{Binding DeleteCommand}" Padding="12,4"
-                        Background="Transparent" BorderThickness="0"
-                        Foreground="#B91C1C" Cursor="Hand"
-                        Visibility="{Binding IsEditing, Converter={StaticResource Bool2Vis}}" />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="保存" Command="{Binding SaveCommand}" Padding="16,4" Margin="0,0,8,0" IsDefault="True" />
-                <Button Content="取消" Command="{Binding CancelCommand}" Padding="16,4" IsCancel="True" />
-            </StackPanel>
-        </Grid>
-    </Grid>
+    </Border>
 </Window>
