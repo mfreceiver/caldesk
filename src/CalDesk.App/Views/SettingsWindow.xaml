@@ -5,9 +5,10 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
         xmlns:m="clr-namespace:CalDesk.App.Models"
+        xmlns:core="clr-namespace:CalDesk.Core.Services;assembly=CalDesk.Core"
         xmlns:conv="clr-namespace:CalDesk.App.Converters"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
-        Title="设置" Width="500" SizeToContent="Height"
+        Title="设置" Width="540" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
@@ -16,6 +17,7 @@
 
     <Grid Margin="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -90,8 +92,70 @@
             </Grid>
         </GroupBox>
 
+        <!-- ===== 日历管理（隐藏 + 12 色） ===== -->
+        <GroupBox Grid.Row="1" Header="日历管理" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="勾选显示该日历；点击色块为该日历配色。" Opacity="0.7"
+                           Margin="0,0,0,6" TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding CalendarRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0" Content="{Binding DisplayName}"
+                                          IsChecked="{Binding IsSelected}"
+                                          VerticalAlignment="Center" TextBlock.FontSize="{DynamicResource FontBody}" />
+                                <!-- 12-swatch picker: clicking a swatch sets row.Color via OnPickColor code-behind.
+                                     The selected swatch is highlighted via the MultiBinding in Border.BorderBrush. -->
+                                <ItemsControl Grid.Column="1"
+                                              ItemsSource="{x:Static core:CalendarPalette.Presets}"
+                                              Margin="8,0,0,0"
+                                              Loaded="OnSwatchPanelLoaded">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="16" Height="16" CornerRadius="3" Margin="2,0"
+                                                    Background="{Binding}"
+                                                    BorderThickness="2" BorderBrush="Transparent"
+                                                    MouseLeftButtonDown="OnPickColor"
+                                                    ToolTip="{Binding}">
+                                                <!-- Tag carries the swatch hex string so code-behind can grab it cheaply.
+                                                     The DataContext here is the hex string itself (ItemsSource = Presets). -->
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="（连接服务器并同步后才会出现日历）" Opacity="0.5"
+                           FontSize="{DynamicResource FontSmall}" Margin="0,6,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasCalendars}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <Button Content="保存日历" Command="{Binding SaveCalendarsCommand}"
+                        Padding="14,4" Margin="0,8,0,0" HorizontalAlignment="Right" />
+            </StackPanel>
+        </GroupBox>
+
         <!-- ===== 桌面窗口 ===== -->
-        <GroupBox Grid.Row="1" Header="桌面窗口" Padding="10" Margin="0,0,0,10">
+        <GroupBox Grid.Row="2" Header="桌面窗口" Padding="10" Margin="0,0,0,10">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -134,7 +198,7 @@
         </GroupBox>
 
         <!-- ===== 默认属性 ===== -->
-        <GroupBox Grid.Row="2" Header="默认属性" Padding="10" Margin="0,0,0,10">
+        <GroupBox Grid.Row="3" Header="默认属性" Padding="10" Margin="0,0,0,10">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -182,8 +246,27 @@
             </Grid>
         </GroupBox>
 
+        <!-- ===== 显示（字号 S/M/L） ===== -->
+        <GroupBox Grid.Row="4" Header="显示" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="84" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="字号" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <RadioButton Content="小 (S)" GroupName="FontSize" Margin="0,0,12,0"
+                                 IsChecked="{Binding FontSize, Converter={StaticResource EnumToBool}, ConverterParameter={x:Static m:FontSizeLevel.Small}, Mode=TwoWay}" />
+                    <RadioButton Content="中 (M)" GroupName="FontSize" Margin="0,0,12,0"
+                                 IsChecked="{Binding FontSize, Converter={StaticResource EnumToBool}, ConverterParameter={x:Static m:FontSizeLevel.Medium}, Mode=TwoWay}" />
+                    <RadioButton Content="大 (L)" GroupName="FontSize"
+                                 IsChecked="{Binding FontSize, Converter={StaticResource EnumToBool}, ConverterParameter={x:Static m:FontSizeLevel.Large}, Mode=TwoWay}" />
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
         <!-- ===== 底部：仅管理其它属性 ===== -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
             <Button Content="保存" Command="{Binding SavePropertiesCommand}" Padding="20,6" Margin="0,0,8,0" IsDefault="True" />
             <Button Content="关闭" Padding="20,6" IsCancel="True" Click="OnClose" />
         </StackPanel>
