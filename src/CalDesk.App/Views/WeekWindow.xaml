@@ -73,11 +73,11 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="0,6" MouseLeftButtonDown="OnDayDoubleAdd">
-                                <TextBlock Margin="0,0,0,3" Opacity="0.8">
-                                    <Run Text="{Binding Header}" FontWeight="SemiBold" />
-                                    <Run Text=" 今天" FontSize="9" Foreground="#3B82F6"
-                                         Visibility="{Binding IsToday, Converter={StaticResource Bool2Vis}}" />
-                                </TextBlock>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,3" Opacity="0.8">
+                                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                                    <TextBlock Text=" 今天" FontSize="9" Foreground="#3B82F6" Margin="4,0,0,0"
+                                               Visibility="{Binding IsToday, Converter={StaticResource Bool2Vis}}" />
+                                </StackPanel>
 
                                 <ItemsControl ItemsSource="{Binding AllDay}" Margin="0,0,0,2">
                                     <ItemsControl.ItemTemplate>

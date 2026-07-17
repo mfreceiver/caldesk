@@ -155,7 +155,7 @@ public partial class App : Application
             vm.InitializeForCreate(date ?? DateOnly.FromDateTime(DateTime.Today), defaultCal);
         }
 
-        var owner = _month is { IsVisible: true } ? _month : _week;
+        var owner = _month is { IsVisible: true } ? (Window?)_month : _week;
         var win = new QuickAddWindow { DataContext = vm, Owner = owner };
         vm.RequestClose += win.Close;
         win.ShowDialog();

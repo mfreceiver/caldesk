@@ -10,6 +10,8 @@
     <!-- Allow restore/design-time on non-Windows (actual WPF compile still requires Windows) -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- LibraryImport source-gen + credential P/Invoke struct marshalling -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

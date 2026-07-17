@@ -91,13 +91,11 @@ public sealed partial class QuickAddViewModel : ObservableObject
         EndText = endLocal.ToString("HH:mm");
         Location = evt.Location ?? string.Empty;
         ReminderMinutes = ReminderService.ParseTriggerMinutes(evt) ?? _settings.DefaultReminderMinutes;
-        Repeat = evt.RecurrenceRule switch
-        {
-            "FREQ=DAILY;INTERVAL=1" => RecurrencePick.Daily,
-            "FREQ=WEEKLY;INTERVAL=1;BYDAY=" + DayOfWeekCode(startLocal.DayOfWeek) => RecurrencePick.Weekly,
-            "FREQ=MONTHLY;INTERVAL=1" => RecurrencePick.Monthly,
-            _ => RecurrencePick.None,
-        };
+        var rule = evt.RecurrenceRule;
+        Repeat = rule == "FREQ=DAILY;INTERVAL=1" ? RecurrencePick.Daily
+               : rule == "FREQ=WEEKLY;INTERVAL=1;BYDAY=" + DayOfWeekCode(startLocal.DayOfWeek) ? RecurrencePick.Weekly
+               : rule == "FREQ=MONTHLY;INTERVAL=1" ? RecurrencePick.Monthly
+               : RecurrencePick.None;
         SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == evt.CalendarId);
     }
 

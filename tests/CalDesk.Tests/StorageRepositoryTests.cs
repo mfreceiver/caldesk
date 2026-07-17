@@ -50,9 +50,16 @@ public sealed class StorageRepositoryTests
 
     private static void CleanupDb(string path)
     {
+        // Windows: the connection pool can hold the temp .db open; clear pools before delete
+        // and retry a few times (file-in-use during teardown otherwise fails the run).
+        try { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); } catch { }
         foreach (var p in new[] { path, path + "-wal", path + "-shm" })
         {
-            if (File.Exists(p)) File.Delete(p);
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                try { if (File.Exists(p)) File.Delete(p); break; }
+                catch (IOException) { System.Threading.Thread.Sleep(50); }
+            }
         }
     }
 
