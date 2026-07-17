@@ -17,6 +17,7 @@
                     <MenuItem Header="新增事项" Click="OnQuickAdd" />
                     <MenuItem Header="立即同步" Click="OnSync" />
                     <MenuItem Header="设置" Click="OnSettings" />
+                    <MenuItem Header="关于" Click="OnAbout" />
                     <Separator />
                     <MenuItem Header="退出" Click="OnExit" />
                 </ContextMenu>
