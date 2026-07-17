@@ -12,9 +12,6 @@
             </tb:TaskbarIcon.IconSource>
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="显示桌面窗口" Click="OnShowWindow" />
-                    <MenuItem Header="月视图" Click="OnShowMonth" />
-                    <MenuItem Header="新增事项" Click="OnQuickAdd" />
                     <MenuItem Header="立即同步" Click="OnSync" />
                     <MenuItem Header="设置" Click="OnSettings" />
                     <MenuItem Header="关于" Click="OnAbout" />
