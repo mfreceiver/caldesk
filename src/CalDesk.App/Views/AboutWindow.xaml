@@ -7,7 +7,7 @@
         Title="关于 CalDesk" Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Icon="pack://application:,,,/Assets/app.ico"
-        FontFamily="Microsoft YaHei UI" FontSize="13">
+        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Grid Margin="22,18,22,18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -21,7 +21,7 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
             <Image Source="pack://application:,,,/Assets/app.ico" Width="48" Height="48" VerticalAlignment="Center" />
             <StackPanel VerticalAlignment="Center" Margin="14,0,0,0">
-                <TextBlock Text="CalDesk" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock Text="CalDesk" FontSize="{DynamicResource FontTitle}" FontWeight="SemiBold" />
                 <TextBlock x:Name="VersionText" Text="版本 …" Opacity="0.65" Margin="0,2,0,0" />
             </StackPanel>
         </StackPanel>
@@ -30,7 +30,7 @@
                    Text="轻量 CalDAV 桌面日历客户端：无边框透明周/月视图、本地优先（SQLite）、多日历同步、托盘常驻与提醒。" />
 
         <TextBlock Grid.Row="2" Text="使用的组件" FontWeight="SemiBold" Margin="0,0,0,4" />
-        <TextBlock Grid.Row="3" Margin="0,0,0,12" FontSize="12" Opacity="0.8">
+        <TextBlock Grid.Row="3" Margin="0,0,0,12" FontSize="{DynamicResource FontBody}" Opacity="0.8">
             <Run Text="• CommunityToolkit.Mvvm — MIT" /><LineBreak />
             <Run Text="• H.NotifyIcon.Wpf — MIT" /><LineBreak />
             <Run Text="• ical.net — MIT" /><LineBreak />
@@ -43,7 +43,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock VerticalAlignment="Center" Opacity="0.6" FontSize="12"
+            <TextBlock VerticalAlignment="Center" Opacity="0.6" FontSize="{DynamicResource FontBody}"
                        Text="MIT License · Copyright © 2026 mfreceiver" />
             <Button Grid.Column="1" Content="关闭" Padding="20,6" IsCancel="True" IsDefault="True" Click="OnClose" />
         </Grid>

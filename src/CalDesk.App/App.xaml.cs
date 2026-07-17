@@ -62,6 +62,8 @@ public partial class App : Application
         _settingsSvc = new SettingsService();
         _settingsSvc.Load();
         StartupLog.Log($"OnStartup: settings loaded  mode={_settingsSvc.Current.WindowMode}  acceptInsecureTls={_settingsSvc.Current.AcceptInsecureTls}  acctCfgStartWithWindows={_settingsSvc.Current.StartWithWindows}");
+        ApplyFontSize(_settingsSvc.Current.FontSize);
+        StartupLog.Log($"OnStartup: font size applied  fontSize={_settingsSvc.Current.FontSize}");
 
         _creds = new WindowsCredentialStore();
         StartupLog.Log("OnStartup: WindowsCredentialStore created");
@@ -156,6 +158,28 @@ public partial class App : Application
 
         TaskScheduler.UnobservedTaskException += (_, args) =>
             StartupLog.Log(args.Exception, "TaskScheduler.UnobservedTaskException");
+    }
+
+    /// <summary>Swap the merged FontSizes dictionary for S/M/L (DynamicResource so all bound
+    /// FontSize setters update live). Removes any existing FontSizes.* dict first.</summary>
+    public void ApplyFontSize(FontSizeLevel level)
+    {
+        var src = level switch
+        {
+            FontSizeLevel.Medium => "Themes/FontSizes.M.xaml",
+            FontSizeLevel.Large => "Themes/FontSizes.L.xaml",
+            _ => "Themes/FontSizes.S.xaml",
+        };
+        var dict = Resources.MergedDictionaries;
+        for (var i = dict.Count - 1; i >= 0; i--)
+        {
+            if (dict[i].Source?.OriginalString.Contains("FontSizes.") == true)
+            {
+                dict.RemoveAt(i);
+            }
+        }
+
+        dict.Add(new ResourceDictionary { Source = new Uri(src, UriKind.Relative) });
     }
 
     private static void ApplyWindowSettings(WeekWindow w, AppSettings s)

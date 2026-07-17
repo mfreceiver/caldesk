@@ -9,7 +9,7 @@
         MinWidth="280" MinHeight="420"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="CanResize"
-        FontFamily="Microsoft YaHei UI" FontSize="13">
+        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
         <Style x:Key="GhostButton" TargetType="Button">
@@ -41,7 +41,7 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="#6B7280" />
             <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Padding" Value="10,3" />
             <Setter Property="MinWidth" Value="32" />
@@ -89,7 +89,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Content="＋" FontSize="17" Style="{StaticResource GhostButton}"
+                <Button Grid.Column="0" Content="＋" FontSize="{DynamicResource FontTitle}" Style="{StaticResource GhostButton}"
                         Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项"
                         VerticalAlignment="Center" />
 
@@ -97,7 +97,7 @@
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Button Content="‹" Style="{StaticResource GhostButton}"
                             Command="{Binding PrevWeekCommand}" Margin="0,0,2,0" />
-                    <TextBlock Text="{Binding WeekHeader}" FontSize="15" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding WeekHeader}" FontSize="{DynamicResource FontHeader}" FontWeight="SemiBold"
                                VerticalAlignment="Center" Margin="4,0" />
                     <Button Content="›" Style="{StaticResource GhostButton}"
                             Command="{Binding NextWeekCommand}" Margin="2,0,0,0" />
@@ -122,7 +122,7 @@
                             <StackPanel Margin="0,6" MouseLeftButtonDown="OnDayDoubleAdd">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,3" Opacity="0.8">
                                     <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
-                                    <TextBlock Text=" 今天" FontSize="9" Foreground="#3B82F6" Margin="4,0,0,0"
+                                    <TextBlock Text=" 今天" FontSize="{DynamicResource FontTiny}" Foreground="#3B82F6" Margin="4,0,0,0"
                                                Visibility="{Binding IsToday, Converter={StaticResource Bool2Vis}}" />
                                 </StackPanel>
 
@@ -133,7 +133,7 @@
                                                     Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding EventId}">
                                                 <Border Background="#223B82F6" CornerRadius="4" Padding="6,2" Margin="0,1">
-                                                    <TextBlock Text="{Binding Summary}" FontSize="12"
+                                                    <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontBody}"
                                                                TextWrapping="Wrap" />
                                                 </Border>
                                             </Button>
@@ -148,9 +148,9 @@
                                                     Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding EventId}">
                                                 <StackPanel Orientation="Horizontal" Margin="0,1">
-                                                    <TextBlock Text="{Binding TimeLabel}" FontSize="11" Foreground="#3B82F6"
+                                                    <TextBlock Text="{Binding TimeLabel}" FontSize="{DynamicResource FontSmall}" Foreground="#3B82F6"
                                                                Width="46" VerticalAlignment="Top" />
-                                                    <TextBlock Text="{Binding Summary}" FontSize="12" TextWrapping="Wrap">
+                                                    <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontBody}" TextWrapping="Wrap">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
                                                                 <Style.Triggers>
@@ -168,7 +168,7 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
 
-                                <TextBlock Text="暂无事项" FontSize="11" Opacity="0.4" Margin="2,2,0,0"
+                                <TextBlock Text="暂无事项" FontSize="{DynamicResource FontSmall}" Opacity="0.4" Margin="2,2,0,0"
                                            Visibility="{Binding IsEmpty, Converter={StaticResource Bool2Vis}}" />
                             </StackPanel>
                         </DataTemplate>
@@ -183,7 +183,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding Sync.Status}" Opacity="0.55" FontSize="11" VerticalAlignment="Center"
+                <TextBlock Text="{Binding Sync.Status}" Opacity="0.55" FontSize="{DynamicResource FontSmall}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
                 <Button Grid.Column="1" Content="今天" Style="{StaticResource GhostButton}"
                         Command="{Binding TodayCommand}" VerticalAlignment="Center" />

@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:QuickAddViewModel}"
         Title="新增 / 编辑事项" Width="380" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        FontFamily="Microsoft YaHei UI" FontSize="13">
+        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
     </Window.Resources>
