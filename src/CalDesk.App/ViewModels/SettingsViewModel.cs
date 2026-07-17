@@ -152,14 +152,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             _settings.AcceptInsecureTls = AcceptInsecureTls;
 
             var account = await GetFormAccountAsync();
-            // Only write when the box has a new value; empty means keep the stored secret.
-            if (!string.IsNullOrEmpty(Password))
-            {
-                await _credentials.SetPasswordAsync(account.CredentialTarget, Password);
-                HasStoredPassword = true;
-            }
-
-            await using var client = await CreateClientForDiscoveryAsync(account);
+            // Never persist from "测试连接" — a typo must not clobber a good stored secret.
+            // Non-empty Password is used only for this probe; empty keeps the stored secret.
+            // Persistence stays in SaveAccountAsync only.
+            await using var client = await CreateClientForDiscoveryAsync(account, passwordOverride: Password);
             var discovered = await client.DiscoverCalendarsAsync();
             StatusText = $"连接成功，发现 {discovered.Count} 个日历";
         }
@@ -241,9 +237,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Saves the non-account properties (window, defaults, autostart) and closes.</summary>
     /// <remarks>
-    /// Credentials are written only from <see cref="SaveAccountAsync"/> / <see cref="TestConnectionAsync"/>,
-    /// and only when <see cref="Password"/> is non-empty. This method never touches
-    /// <see cref="ICredentialStore"/> so an empty password box cannot clobber a stored secret.
+    /// Credentials are written only from <see cref="SaveAccountAsync"/>, and only when
+    /// <see cref="Password"/> is non-empty. <see cref="TestConnectionAsync"/> never mutates
+    /// the credential store. This method never touches <see cref="ICredentialStore"/> so an
+    /// empty password box cannot clobber a stored secret.
     /// </remarks>
     [RelayCommand]
     private void SaveProperties()
@@ -272,14 +269,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Create a CalDAV client for discovery, wiring a step logger into
-    /// <c>%AppData%\CalDesk\caldesk.log</c> when the concrete factory is available.</summary>
-    private Task<ICalDavClient> CreateClientForDiscoveryAsync(Account account)
+    /// <c>%AppData%\CalDesk\caldesk.log</c> when the concrete factory is available.
+    /// When <paramref name="passwordOverride"/> is non-empty, that secret is used for Basic
+    /// auth without writing to <see cref="ICredentialStore"/> (for connection probes).</summary>
+    private Task<ICalDavClient> CreateClientForDiscoveryAsync(Account account, string? passwordOverride = null)
     {
         if (_factory is CalDavClientFactory concrete)
         {
+            if (!string.IsNullOrEmpty(passwordOverride))
+            {
+                return Task.FromResult(concrete.CreateWithPassword(account, passwordOverride, StartupLog.Log));
+            }
+
             return concrete.CreateAsync(account, StartupLog.Log);
         }
 
+        // Interface path has no password override; empty Password ⇒ use store as usual.
         return _factory.CreateAsync(account);
     }
 }

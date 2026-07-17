@@ -64,7 +64,7 @@ dotnet publish src/CalDesk.App/CalDesk.App.csproj `
    - 表头 **月** → 切到月视图；月视图 **周** → 切回。
    - 月视图：跨月补齐格灰显、今日蓝徽、点单元格内事项进入编辑、双击空白格新增。
    - 托盘 **立即同步**、状态栏显示“已同步 · 拉 N · 推 M”。
-   - 关窗 → 收到托盘；托盘双击/“显示桌面窗口” → 重新显示。
+    - 关窗 → 收到托盘；托盘菜单：立即同步 / 设置 / 关于 / 退出（托盘双击可重新显示窗口）。
 4. 运行期排查：留意 VS “输出”窗口的 `BindingExpression` 错误（运行期绑定失败，编译期不报）。
 5. 数据位置：`%AppData%\CalDesk\caldesk.db` + `settings.json`；密码在“Windows 凭据管理器”（目标名 `CalDesk:account:<id>`）。
 

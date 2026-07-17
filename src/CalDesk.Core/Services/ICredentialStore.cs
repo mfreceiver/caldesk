@@ -10,6 +10,7 @@ public interface ICredentialStore
 
     Task DeleteAsync(string target, CancellationToken ct = default);
 
-    /// <summary>Returns whether a secret is stored for <paramref name="target"/> without loading it into memory.</summary>
+    /// <summary>Returns whether a non-empty secret is stored for <paramref name="target"/>
+    /// without copying the secret into a managed string.</summary>
     Task<bool> ExistsAsync(string target, CancellationToken ct = default);
 }
