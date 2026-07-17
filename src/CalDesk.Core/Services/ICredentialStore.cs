@@ -9,4 +9,7 @@ public interface ICredentialStore
     Task SetPasswordAsync(string target, string password, CancellationToken ct = default);
 
     Task DeleteAsync(string target, CancellationToken ct = default);
+
+    /// <summary>Returns whether a secret is stored for <paramref name="target"/> without loading it into memory.</summary>
+    Task<bool> ExistsAsync(string target, CancellationToken ct = default);
 }

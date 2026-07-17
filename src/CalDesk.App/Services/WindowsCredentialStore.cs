@@ -62,6 +62,19 @@ public sealed partial class WindowsCredentialStore : ICredentialStore
         return Task.CompletedTask;
     }
 
+    public Task<bool> ExistsAsync(string target, CancellationToken ct = default)
+    {
+        if (!CredReadW(target, CRED_TYPE_GENERIC, 0, out var ptr))
+        {
+            return Marshal.GetLastWin32Error() == ERROR_NOT_FOUND
+                ? Task.FromResult(false)
+                : throw new Win32Exception();
+        }
+
+        CredFree(ptr);
+        return Task.FromResult(true);
+    }
+
     private static string? Read(string target)
     {
         if (!CredReadW(target, CRED_TYPE_GENERIC, 0, out var ptr))

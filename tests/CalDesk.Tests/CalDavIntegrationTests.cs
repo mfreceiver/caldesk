@@ -24,6 +24,7 @@ public sealed class CalDavIntegrationTests
         public Task<string?> GetPasswordAsync(string target, CancellationToken ct = default) => Task.FromResult<string?>(_password);
         public Task SetPasswordAsync(string target, string password, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteAsync(string target, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> ExistsAsync(string target, CancellationToken ct = default) => Task.FromResult(!string.IsNullOrEmpty(_password));
     }
 
     private static async Task<ICalDavClient> CreateClientAsync()

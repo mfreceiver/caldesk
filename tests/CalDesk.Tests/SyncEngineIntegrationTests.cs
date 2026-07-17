@@ -23,6 +23,7 @@ public sealed class SyncEngineIntegrationTests
         public Task<string?> GetPasswordAsync(string target, CancellationToken ct = default) => Task.FromResult<string?>(_p);
         public Task SetPasswordAsync(string target, string password, CancellationToken ct = default) => Task.CompletedTask;
         public Task DeleteAsync(string target, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> ExistsAsync(string target, CancellationToken ct = default) => Task.FromResult(!string.IsNullOrEmpty(_p));
     }
 
     [Fact]
