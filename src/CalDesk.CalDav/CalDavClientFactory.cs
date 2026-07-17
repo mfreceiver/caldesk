@@ -38,8 +38,14 @@ public sealed class CalDavClientFactory : ICalDavClientFactory
     }
 
     /// <summary>Create a client using an explicit password (does not read or write the credential store).
-    /// Used by settings "测试连接" so a probe can use the form password without persisting it.</summary>
-    public ICalDavClient CreateWithPassword(Account account, string password, Action<string>? log = null)
+    /// Used by settings "测试连接" so a probe can use the form password without persisting it.
+    /// When <paramref name="trustAllCertificates"/> is non-null, that value is used for this client
+    /// only (does not mutate the factory provider / settings). Null falls back to the provider.</summary>
+    public ICalDavClient CreateWithPassword(
+        Account account,
+        string password,
+        Action<string>? log = null,
+        bool? trustAllCertificates = null)
     {
         var origin = new Uri(new Uri(account.ServerUrl).GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
 
@@ -49,7 +55,8 @@ public sealed class CalDavClientFactory : ICalDavClientFactory
             // the same method+body when following redirects.
             AllowAutoRedirect = false,
         };
-        if (_trustAllCertificates?.Invoke() ?? false)
+        var trust = trustAllCertificates ?? (_trustAllCertificates?.Invoke() ?? false);
+        if (trust)
         {
             handler.SslOptions = new SslClientAuthenticationOptions
             {
