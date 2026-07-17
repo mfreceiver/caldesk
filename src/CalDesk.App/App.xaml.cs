@@ -238,8 +238,6 @@ public partial class App : Application
     }
 
     private void OnShowWindow(object sender, RoutedEventArgs e) => ActivateWeek();
-    private void OnShowMonth(object sender, RoutedEventArgs e) => OpenMonth();
-    private void OnQuickAdd(object sender, RoutedEventArgs e) => _ = OpenQuickAddAsync(DateOnly.FromDateTime(DateTime.Today), null);
     private void OnSync(object sender, RoutedEventArgs e) => _ = _sync.RunAsync();
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
     private void OnAbout(object sender, RoutedEventArgs e) => new AboutWindow { Owner = _week }.ShowDialog();
