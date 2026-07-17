@@ -288,13 +288,31 @@ public partial class App : Application
         _week?.Activate();
     }
 
-    private void OpenSettings()
+    private async void OpenSettings()
     {
         var vm = new SettingsViewModel(_store, _settingsSvc, _creds, _factory, _sync);
         var win = new SettingsWindow { DataContext = vm, Owner = _week };
         vm.Error += msg => MessageBox.Show(win, msg, "CalDesk", MessageBoxButton.OK, MessageBoxImage.Warning);
-        _ = vm.InitializeAsync();
         vm.RequestClose += win.Close;
+
+        // Await init before the dialog so account fields / HasStoredPassword are ready and
+        // the user cannot type a password that InitializeAsync would later blank (UI/VM desync).
+        // Exceptions surface here instead of fire-and-forget.
+        try
+        {
+            await vm.InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                win,
+                "加载设置失败：" + ex.Message,
+                "CalDesk",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         win.ShowDialog();
 
         var s = _settingsSvc.Current;

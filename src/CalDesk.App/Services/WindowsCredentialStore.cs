@@ -64,6 +64,8 @@ public sealed partial class WindowsCredentialStore : ICredentialStore
 
     public Task<bool> ExistsAsync(string target, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (!CredReadW(target, CRED_TYPE_GENERIC, 0, out var ptr))
         {
             return Marshal.GetLastWin32Error() == ERROR_NOT_FOUND
@@ -71,8 +73,17 @@ public sealed partial class WindowsCredentialStore : ICredentialStore
                 : throw new Win32Exception();
         }
 
-        CredFree(ptr);
-        return Task.FromResult(true);
+        try
+        {
+            // Entry present but empty/corrupt blob is not a usable secret (UI must not claim "已保存密码").
+            // Read only metadata size — do not copy the blob into a managed string.
+            var cred = Marshal.PtrToStructure<CREDENTIAL>(ptr);
+            return Task.FromResult(cred.CredentialBlobSize > 0);
+        }
+        finally
+        {
+            CredFree(ptr);
+        }
     }
 
     private static string? Read(string target)

@@ -34,6 +34,13 @@ public sealed class CalDavClientFactory : ICalDavClientFactory
     public async Task<ICalDavClient> CreateAsync(Account account, Action<string>? log, CancellationToken ct = default)
     {
         var password = await _credentials.GetPasswordAsync(account.CredentialTarget, ct).ConfigureAwait(false) ?? string.Empty;
+        return CreateWithPassword(account, password, log);
+    }
+
+    /// <summary>Create a client using an explicit password (does not read or write the credential store).
+    /// Used by settings "测试连接" so a probe can use the form password without persisting it.</summary>
+    public ICalDavClient CreateWithPassword(Account account, string password, Action<string>? log = null)
+    {
         var origin = new Uri(new Uri(account.ServerUrl).GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
 
         var handler = new SocketsHttpHandler
@@ -60,7 +67,7 @@ public sealed class CalDavClientFactory : ICalDavClientFactory
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", token);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("CalDesk/0.1");
 
-        return new CalDavClient(account, http, origin, log);
+        return new CalDavClient(account, http, origin, log ?? _log);
     }
 
     internal static Uri Combine(Uri origin, string path) => new(origin, path.TrimStart('/'));
