@@ -20,16 +20,16 @@ dotnet test tests/CalDesk.Tests --nologo        # 目标：45/45 通过
 - 需要 **Windows** 才能编译（`CalDesk.App` 是 WPF，`net10.0-windows`）。
 - 若要发布单文件 EXE：见 `docs/BUILD.md` 第三节（framework-dependent，win-x64，产物约 28 MB）。
 
-## 三、已知 Windows 构建修复（兜底：`git pull` 后若编译失败，核对这 5 处）
-> 这些是让上游（Linux 编写、从未在 Windows 编译过）的代码在 Windows 上通过编译/测试所需的改动，**全部位于 `src/CalDesk.App/**` 与 `tests/**`，未改核心库**。
+## 三、Windows 构建适配（已提交，`git pull` 后即编即测）
+> 让上游（Linux 编写）的代码在 Windows 上通过编译/测试所需的改动，**全部位于 `src/CalDesk.App/**` 与 `tests/**`，未改核心库**。已在 `131ebeb` 提交回远端，无需手工补。
 
 1. **`src/CalDesk.App/CalDesk.App.csproj`** → 增加 `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>`（`LibraryImport` 源生器 + 凭据 P/Invoke 结构体需要 unsafe）。
 2. **`src/CalDesk.App/Views/WeekWindow.xaml`** → 「今天」徽章由 `<Run Visibility=...>` 改为水平 `StackPanel` 内独立 `<TextBlock>`（`Run` 是 `Inline`，无 `Visibility` 属性）。
-3. **`src/CalDesk.App/ViewModels/QuickAddViewModel.cs`** → 周重复的 `switch` 模式改用 `_ when evt.RecurrenceRule == ...` 守卫（字面量拼接方法调用非常量，不能作常量模式）。
-4. **`src/CalDesk.App/App.xaml.cs`** → 月/周窗口三元表达式真分支强制 `(Window)`（`MonthWindow` 与 `WeekWindow` 间无隐式转换）。
+3. **`src/CalDesk.App/ViewModels/QuickAddViewModel.cs`** → 周重复的 `switch` 改为三元 `==` 比较（字面量拼接方法调用非常量，不能作 `switch` 常量模式）。
+4. **`src/CalDesk.App/App.xaml.cs`** → 月/周窗口三元真分支强制 `(Window?)`（`MonthWindow` 与 `WeekWindow` 间无隐式转换）。
 5. **`tests/CalDesk.Tests/StorageRepositoryTests.cs`** → `CleanupDb` 增加 `SqliteConnection.ClearAllPools()` + 删除重试（Windows 上连接池锁住 temp `.db`，导致 teardown 删文件报“文件被占用”）。
 
-> ⚠ 状态说明：这 5 处最初为**本地未提交**改动。**只有把它们提交回远端后，第二节“拉取即编译”才真正成立**；否则新会话需按本节逐条补回。
+> ✅ **已验证**：`131ebeb` 在 Windows 构建机上 `dotnet build CalDesk.slnx` = **0 错误 / 0 警告**；`dotnet test` = **45/45 通过**。第二节“拉取即编译即测”成立。
 
 ## 四、在 Kilo 新会话里如何使用
 在新会话直接发送（任选其一）：
