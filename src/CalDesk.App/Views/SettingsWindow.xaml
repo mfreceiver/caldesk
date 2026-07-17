@@ -9,7 +9,7 @@
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
         Title="设置" Width="500" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        FontFamily="Microsoft YaHei UI" FontSize="13">
+        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
     </Window.Resources>
@@ -62,7 +62,7 @@
                          Password stays empty on open; HasStoredPassword drives the hint (empty box = keep stored). -->
                     <StackPanel Grid.Column="1">
                         <PasswordBox x:Name="PasswordBox" PasswordChanged="OnPasswordChanged" Padding="4" />
-                        <TextBlock Text="{Binding PasswordHint}" FontSize="11" Opacity="0.7" Margin="0,3,0,0"
+                        <TextBlock Text="{Binding PasswordHint}" FontSize="{DynamicResource FontSmall}" Opacity="0.7" Margin="0,3,0,0"
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Grid>
@@ -150,7 +150,7 @@
                     <Grid Grid.Column="1">
                         <ComboBox ItemsSource="{Binding Calendars}" SelectedItem="{Binding SelectedCalendar}"
                                   DisplayMemberPath="DisplayName" IsEnabled="{Binding HasCalendars}" />
-                        <TextBlock Text="（连接服务器后可选）" VerticalAlignment="Center" Opacity="0.5" FontSize="11" IsHitTestVisible="False">
+                        <TextBlock Text="（连接服务器后可选）" VerticalAlignment="Center" Opacity="0.5" FontSize="{DynamicResource FontSmall}" IsHitTestVisible="False">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Collapsed" />

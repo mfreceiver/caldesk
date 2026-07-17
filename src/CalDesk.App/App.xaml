@@ -4,21 +4,26 @@
              xmlns:tb="clr-namespace:H.NotifyIcon;assembly=H.NotifyIcon.Wpf"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <tb:TaskbarIcon x:Key="TrayIcon"
-                        ToolTipText="CalDesk"
-                        TrayLeftMouseDoubleClick="OnShowWindow">
-            <tb:TaskbarIcon.IconSource>
-                <BitmapImage UriSource="pack://application:,,,/Assets/app.ico" />
-            </tb:TaskbarIcon.IconSource>
-            <tb:TaskbarIcon.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Header="立即同步" Click="OnSync" />
-                    <MenuItem Header="设置" Click="OnSettings" />
-                    <MenuItem Header="关于" Click="OnAbout" />
-                    <Separator />
-                    <MenuItem Header="退出" Click="OnExit" />
-                </ContextMenu>
-            </tb:TaskbarIcon.ContextMenu>
-        </tb:TaskbarIcon>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/FontSizes.S.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <tb:TaskbarIcon x:Key="TrayIcon"
+                            ToolTipText="CalDesk"
+                            TrayLeftMouseDoubleClick="OnShowWindow">
+                <tb:TaskbarIcon.IconSource>
+                    <BitmapImage UriSource="pack://application:,,,/Assets/app.ico" />
+                </tb:TaskbarIcon.IconSource>
+                <tb:TaskbarIcon.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="立即同步" Click="OnSync" />
+                        <MenuItem Header="设置" Click="OnSettings" />
+                        <MenuItem Header="关于" Click="OnAbout" />
+                        <Separator />
+                        <MenuItem Header="退出" Click="OnExit" />
+                    </ContextMenu>
+                </tb:TaskbarIcon.ContextMenu>
+            </tb:TaskbarIcon>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
