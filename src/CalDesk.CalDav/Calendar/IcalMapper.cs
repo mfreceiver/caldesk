@@ -88,7 +88,7 @@ public static class IcalMapper
             EndUtc = endUtc,
             TimeZoneId = start?.TzId,
             IsFloating = start is not null && start.IsFloating,
-            RecurrenceRule = RulesToRrule(ve.RecurrenceRules),
+            RecurrenceRule = RuleToRrule(ve.RecurrenceRule),
             SyncStatus = SyncStatus.Clean,
         };
     }
@@ -124,19 +124,13 @@ public static class IcalMapper
         return isAllDay ? startUtc.AddDays(1) : startUtc;
     }
 
-    private static string? RulesToRrule(IList<RecurrencePattern>? rules)
+    private static string? RuleToRrule(RecurrenceRule? p)
     {
-        if (rules is null || rules.Count == 0)
+        if (p is null)
         {
             return null;
         }
 
-        var parts = rules.Select(RuleToRrule).Where(x => x is not null).ToList();
-        return parts.Count == 0 ? null : string.Join(";", parts);
-    }
-
-    private static string? RuleToRrule(RecurrencePattern p)
-    {
         var freq = p.Frequency switch
         {
             FrequencyType.Daily => "DAILY",
@@ -204,7 +198,7 @@ public static class IcalMapper
 
         if (evt.IsRecurring && CalDesk.Core.Recurrence.RecurrencePattern.Parse(evt.RecurrenceRule)?.ToRrule() is { } rrule)
         {
-            ve.RecurrenceRules.Add(new RecurrencePattern(rrule));
+            ve.RecurrenceRule = new RecurrencePattern(rrule);
         }
 
         cal.Events.Add(ve);
@@ -235,13 +229,12 @@ public static class IcalMapper
                 var rrule = CalDesk.Core.Recurrence.RecurrencePattern.Parse(evt.RecurrenceRule)?.ToRrule();
                 if (rrule is not null)
                 {
-                    ve.RecurrenceRules.Clear();
-                    ve.RecurrenceRules.Add(new RecurrencePattern(rrule));
+                    ve.RecurrenceRule = new RecurrencePattern(rrule);
                 }
             }
             else
             {
-                ve.RecurrenceRules.Clear();
+                ve.RecurrenceRule = null;
             }
 
             return new CalendarSerializer().SerializeToString(cal);
