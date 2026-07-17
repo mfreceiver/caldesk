@@ -9,7 +9,8 @@
         MinWidth="380" MinHeight="520"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="CanResize"
-        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
+        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}"
+        Loaded="OnLoaded">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
         <Style x:Key="GhostButton" TargetType="Button">
@@ -74,46 +75,50 @@
         <Border.Effect>
             <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" Color="Black" />
         </Border.Effect>
-        <Grid>
+        <Grid x:Name="RootGrid">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />   <!-- header -->
+                <RowDefinition Height="Auto" />   <!-- weekday headers -->
+                <RowDefinition Height="3*" MinHeight="180" /> <!-- top month grid -->
+                <RowDefinition Height="Auto" />   <!-- GridSplitter -->
+                <RowDefinition Height="2*" MinHeight="140" /> <!-- bottom day detail -->
+                <RowDefinition Height="Auto" />   <!-- status -->
             </Grid.RowDefinitions>
 
-            <!-- header: ＋ | ‹  MonthHeader  › | 周/月 toggle -->
-            <Grid Grid.Row="0" Margin="0,0,0,6">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <!-- header: ＋ | ‹  MonthHeader  › | 周/月 toggle, on a soft band -->
+            <Border Grid.Row="0" Background="{StaticResource HeaderBrushMonth}" CornerRadius="8" Padding="10,6" Margin="0,0,0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Content="＋" FontSize="{DynamicResource FontTitle}" Style="{StaticResource GhostButton}"
-                        Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项"
-                        VerticalAlignment="Center" />
+                    <Button Grid.Column="0" Content="＋" FontSize="{DynamicResource FontTitle}" Style="{StaticResource GhostButton}"
+                            Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项"
+                            VerticalAlignment="Center" />
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Button Content="‹" Style="{StaticResource GhostButton}"
-                            Command="{Binding PrevMonthCommand}" Margin="0,0,2,0" />
-                    <TextBlock Text="{Binding MonthHeader}" FontSize="{DynamicResource FontHeader}" FontWeight="SemiBold"
-                               VerticalAlignment="Center" Margin="4,0" />
-                    <Button Content="›" Style="{StaticResource GhostButton}"
-                            Command="{Binding NextMonthCommand}" Margin="2,0,0,0" />
-                </StackPanel>
-
-                <Border Grid.Column="2" Background="#14000000" CornerRadius="7" Padding="2"
-                        VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="周" Style="{StaticResource ToggleSegment}"
-                                ToolTip="周视图" Click="OnBackToWeek" />
-                        <Button Content="月" Style="{StaticResource ToggleSegmentActive}"
-                                IsEnabled="False" ToolTip="月视图" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button Content="‹" Style="{StaticResource GhostButton}"
+                                Command="{Binding PrevMonthCommand}" Margin="0,0,2,0" />
+                        <TextBlock Text="{Binding MonthHeader}" FontSize="{DynamicResource FontHeader}" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="4,0" />
+                        <Button Content="›" Style="{StaticResource GhostButton}"
+                                Command="{Binding NextMonthCommand}" Margin="2,0,0,0" />
                     </StackPanel>
-                </Border>
-            </Grid>
+
+                    <Border Grid.Column="2" Background="#14000000" CornerRadius="7" Padding="2"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="周" Style="{StaticResource ToggleSegment}"
+                                    ToolTip="周视图" Click="OnBackToWeek" />
+                            <Button Content="月" Style="{StaticResource ToggleSegmentActive}"
+                                    IsEnabled="False" ToolTip="月视图" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
 
             <!-- weekday header row -->
             <ItemsControl Grid.Row="1" ItemsSource="{Binding WeekdayHeaders}" Margin="0,0,0,2">
@@ -129,8 +134,13 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- month grid: rows = weeks, each row = 7 day cells -->
+            <!-- month grid: 6 equal-height rows (weeks); each row = 7 day cells -->
             <ItemsControl Grid.Row="2" ItemsSource="{Binding Month.Weeks}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Rows="6" Columns="1" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <ItemsControl ItemsSource="{Binding Days}">
@@ -141,63 +151,81 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border x:Name="CellRoot" Margin="1" Padding="2,1" CornerRadius="4"
-                                            Background="Transparent" MouseLeftButtonDown="OnCellAdd">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsInMonth}" Value="False">
-                                                        <Setter Property="Opacity" Value="0.35" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <StackPanel>
-                                            <Border CornerRadius="7" Padding="6,1" Margin="1,0,1,2" HorizontalAlignment="Left">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="Transparent" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                <Setter Property="Background" Value="#3B82F6" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <TextBlock Text="{Binding Day}" FontSize="{DynamicResource FontSmall}" HorizontalAlignment="Center">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="#1F2937" />
-                                                            <Setter Property="FontWeight" Value="Normal" />
+                                    <!-- Cell: click anywhere → SelectDayCommand(Date). Event rows below
+                                         are nested Buttons with their own EditCommand that intercept clicks. -->
+                                    <Button Style="{StaticResource RowButton}" Margin="1"
+                                            Command="{Binding DataContext.SelectDayCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding Date}">
+                                        <Border MinHeight="92" Padding="2,1" CornerRadius="4">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#0A000000" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsInMonth}" Value="False">
+                                                            <Setter Property="Opacity" Value="0.35" />
+                                                            <Setter Property="Background" Value="Transparent" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                            <Setter Property="Background" Value="#143B82F6" />
+                                                            <Setter Property="Opacity" Value="1" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel>
+                                                <Border CornerRadius="7" Padding="6,1" Margin="1,0,1,2" HorizontalAlignment="Left">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="Transparent" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                    <Setter Property="Foreground" Value="#FFFFFF" />
-                                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                                    <Setter Property="Background" Value="#3B82F6" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </Border>
-                                            <ItemsControl ItemsSource="{Binding Preview}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Button Style="{StaticResource RowButton}" Margin="0"
-                                                                Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding EventId}">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <Border Width="5" Height="5" CornerRadius="2" Margin="0,0,3,0"
-                                                                        Background="{Binding Color}" Opacity="0.85"
-                                                                        VerticalAlignment="Center" />
-                                                                <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontTiny}"
-                                                                           TextTrimming="CharacterEllipsis" MaxWidth="34" />
-                                                            </StackPanel>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </Border>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding Day}" FontSize="{DynamicResource FontSmall}" HorizontalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="#1F2937" />
+                                                                <Setter Property="FontWeight" Value="Normal" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#FFFFFF" />
+                                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsWeekend}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#B91C1C" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                                <ItemsControl ItemsSource="{Binding Preview}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Style="{StaticResource RowButton}" Margin="0"
+                                                                    Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding EventId}">
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <Border Width="5" Height="5" CornerRadius="2" Margin="0,0,3,0"
+                                                                            Background="{Binding Color, TargetNullValue=#3B82F6}" Opacity="0.85"
+                                                                            VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontTiny}"
+                                                                               TextTrimming="CharacterEllipsis" MaxWidth="34" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <!-- Overflow indicator (+N): clicking the cell already triggers SelectDay -->
+                                                <TextBlock Text="{Binding OverflowCount, StringFormat={}+{0}}"
+                                                           FontSize="{DynamicResource FontTiny}" Foreground="#6B7280" Margin="2,0,0,0"
+                                                           Visibility="{Binding HasOverflow, Converter={StaticResource Bool2Vis}}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -205,8 +233,124 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- GridSplitter: drag to rebalance top/bottom; persisted via vm.SplitRatio -->
+            <GridSplitter Grid.Row="3" Height="6" HorizontalAlignment="Stretch"
+                          Background="#11000000" ResizeBehavior="PreviousAndNext"
+                          DragCompleted="OnSplitChanged" />
+
+            <!-- bottom day-detail: header line + per-day ＋, then all-day + timed events -->
+            <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Padding="2,0,6,0">
+                <StackPanel Margin="0,4,0,0">
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding SelectedDay.Header, FallbackValue=该日无事项}"
+                                   FontWeight="SemiBold" FontSize="{DynamicResource FontBody}" />
+                        <Button Grid.Column="1" Content="＋" FontSize="{DynamicResource FontTitle}" ToolTip="为该日新增"
+                                Command="{Binding AddNewCommand}" CommandParameter="{Binding SelectedDate}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedDate}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <!-- null-state: SelectedDay not built yet -->
+                    <TextBlock Text="该日无事项" FontSize="{DynamicResource FontSmall}" Opacity="0.4" Margin="2,2,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedDay}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- day body (visible only when SelectedDay != null) -->
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedDay}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+
+                        <!-- all-day events -->
+                        <ItemsControl ItemsSource="{Binding SelectedDay.AllDay}" Margin="0,0,0,2">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource RowButton}" Margin="0,1"
+                                            Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding EventId}">
+                                        <Border Background="#223B82F6" CornerRadius="4" Padding="6,2" Margin="0,1">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Border Width="5" Height="5" CornerRadius="2" Margin="0,0,5,0"
+                                                        Background="{Binding Color, TargetNullValue=#3B82F6}" Opacity="0.9"
+                                                        VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontBody}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- timed events -->
+                        <ItemsControl ItemsSource="{Binding SelectedDay.Timed}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource RowButton}" Margin="0,1"
+                                            Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding EventId}">
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="{Binding TimeLabel}" FontSize="{DynamicResource FontSmall}" Foreground="#3B82F6"
+                                                       Width="46" VerticalAlignment="Top" />
+                                            <Border Width="5" Height="5" CornerRadius="2" Margin="2,3,5,0"
+                                                    Background="{Binding Color, TargetNullValue=#3B82F6}" Opacity="0.9"
+                                                    VerticalAlignment="Top" />
+                                            <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontBody}" TextWrapping="Wrap">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsOngoing}" Value="True">
+                                                                <Setter Property="FontWeight" Value="Bold" />
+                                                                <Setter Property="Foreground" Value="#B91C1C" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- in-month empty-day hint -->
+                        <TextBlock Text="该日无事项" FontSize="{DynamicResource FontSmall}" Opacity="0.4" Margin="2,2,0,0"
+                                   Visibility="{Binding SelectedDay.IsEmpty, Converter={StaticResource Bool2Vis}}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
             <!-- status -->
-            <Grid Grid.Row="3" Margin="0,8,0,0">
+            <Grid Grid.Row="5" Margin="0,8,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
