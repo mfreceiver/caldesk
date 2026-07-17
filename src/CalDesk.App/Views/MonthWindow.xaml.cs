@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using CalDesk.App.ViewModels;
 using CalDesk.App.Windowing;
 
@@ -32,10 +33,35 @@ public partial class MonthWindow : Window
             return;
         }
 
+        // Let ResizeGrip / interactive children handle their own input.
+        if (e.OriginalSource is DependencyObject src &&
+            (FindAncestor<ResizeGrip>(src) is not null ||
+             FindAncestor<Button>(src) is not null ||
+             FindAncestor<ScrollBar>(src) is not null ||
+             FindAncestor<GridSplitter>(src) is not null))
+        {
+            return;
+        }
+
         if (e.ChangedButton == MouseButton.Left)
         {
             DragMove();
         }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private void OnBackToWeek(object sender, RoutedEventArgs e) => BackRequested?.Invoke();

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,9 +11,15 @@ namespace CalDesk.App.Views;
 
 public partial class SettingsWindow : Window
 {
+    /// <summary>Tracks (row, handler) subscriptions installed by <see cref="OnSwatchPanelLoaded"/>
+    /// so we can detach them before rows rebuild or when the window closes. Without this, each
+    /// refresh / reopen stacks another handler on the same row → handler leak.</summary>
+    private readonly List<(SettingsViewModel.CalendarRow Row, PropertyChangedEventHandler Handler)> _swatchHandlers = new();
+
     public SettingsWindow()
     {
         InitializeComponent();
+        Unloaded += OnUnloaded;
     }
 
     private void OnPasswordChanged(object sender, RoutedEventArgs e)
@@ -23,6 +31,19 @@ public partial class SettingsWindow : Window
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
+
+    /// <summary>Detach every swatch Property handler installed by <see cref="OnSwatchPanelLoaded"/>
+    /// so the rows can be garbage-collected and we don't double-subscribe on next rebuild.</summary>
+    private void DetachSwatchHandlers()
+    {
+        foreach (var (row, handler) in _swatchHandlers)
+        {
+            row.PropertyChanged -= handler;
+        }
+        _swatchHandlers.Clear();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => DetachSwatchHandlers();
 
     /// <summary>Clicking a color swatch assigns that swatch's hex to the owning row's
     /// <see cref="SettingsViewModel.CalendarRow.Color"/>. The swatch's <c>DataContext</c>
@@ -47,6 +68,28 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        // Rows rebuild on every refresh; detach any stale subscription for this specific row
+        // before installing a fresh one so we never stack handlers across rebuilds.
+        for (int i = _swatchHandlers.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_swatchHandlers[i].Row, row))
+            {
+                row.PropertyChanged -= _swatchHandlers[i].Handler;
+                _swatchHandlers.RemoveAt(i);
+            }
+        }
+
+        PaintSwatchRings(panel, row);
+
+        // Re-run the ring paint whenever the row's Color changes (e.g. from code, or after
+        // SaveCalendarsAsync refresh) so the highlighted swatch tracks the model.
+        PropertyChangedEventHandler handler = (_, _) => Dispatcher.BeginInvoke(new Action(() => PaintSwatchRings(panel, row)));
+        row.PropertyChanged += handler;
+        _swatchHandlers.Add((row, handler));
+    }
+
+    private static void PaintSwatchRings(FrameworkElement panel, SettingsViewModel.CalendarRow row)
+    {
         foreach (var child in FindVisualChildren<Border>(panel))
         {
             if (child.DataContext is not string swatchHex)
@@ -59,24 +102,6 @@ public partial class SettingsWindow : Window
             child.BorderBrush = selected ? Brushes.Black : Brushes.Transparent;
             child.BorderThickness = new Thickness(selected ? 2 : 0);
         }
-
-        // Re-run the ring paint whenever the row's Color changes (e.g. from code, or after
-        // SaveCalendarsAsync refresh) so the highlighted swatch tracks the model.
-        row.PropertyChanged += (_, _) => Dispatcher.BeginInvoke(new Action(() =>
-        {
-            foreach (var child in FindVisualChildren<Border>(panel))
-            {
-                if (child.DataContext is not string h)
-                {
-                    continue;
-                }
-
-                bool sel = row.Color is not null
-                    && string.Equals(row.Color, h, StringComparison.OrdinalIgnoreCase);
-                child.BorderBrush = sel ? Brushes.Black : Brushes.Transparent;
-                child.BorderThickness = new Thickness(sel ? 2 : 0);
-            }
-        }));
     }
 
     private void OnPickColor(object sender, MouseButtonEventArgs e)

@@ -18,6 +18,9 @@ public sealed class WeekDay
 
     public bool IsToday { get; init; }
 
+    /// <summary>Saturday or Sunday — drives the weekend shade trigger in the week view.</summary>
+    public bool IsWeekend { get; init; }
+
     public bool IsEmpty => AllDay.Count == 0 && Timed.Count == 0;
 
     /// <summary>All-day occurrences (shown first / above timed).</summary>

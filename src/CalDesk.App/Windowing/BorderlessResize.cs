@@ -19,8 +19,10 @@ public static class BorderlessResize
         src.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
         {
             if (msg != WM_NCHITTEST) return IntPtr.Zero;
-            var x = (short)(lParam.ToInt32() & 0xffff);
-            var y = (short)((lParam.ToInt32() >> 16) & 0xffff);
+            // Pack as Int64 so multi-monitor negative coords on 64-bit don't overflow ToInt32().
+            var packed = lParam.ToInt64();
+            var x = (short)(packed & 0xffff);
+            var y = (short)((packed >> 16) & 0xffff);
             var p = w.PointFromScreen(new Point(x, y));
             var b = resizeBorder * (PresentationSource.FromVisual(w)?.CompositionTarget?.TransformToDevice.M11 ?? 1.0);
             bool left = p.X <= b, right = p.X >= w.ActualWidth - b;

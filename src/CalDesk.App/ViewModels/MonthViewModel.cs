@@ -110,11 +110,12 @@ public sealed partial class MonthViewModel : ObservableObject
         if (v != Volatile.Read(ref _navVersion))
             return;
         Month = built;
-        // Default-select today after the first successful month load so the bottom panel is not empty.
-        if (SelectedDate is null)
-        {
-            await SelectDay(today);
-        }
+        // Always refresh the selected day after committing Month so the bottom panel never
+        // shows stale events (sync / hide-calendar / edit reloads in the same month).
+        // When navigating to a different month, SelectedDate no longer matches and we fall
+        // back to today.
+        var sel = SelectedDate is { } d && d.Year == year && d.Month == monthNumber ? d : today;
+        await SelectDay(sel);
     }
 
     /// <summary>Selects a single day and builds its detail (all-day + timed) for the bottom panel.
