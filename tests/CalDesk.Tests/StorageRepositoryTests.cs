@@ -103,6 +103,8 @@ public sealed class StorageRepositoryTests
             => throw new NotSupportedException();
         public Task RemoveAsync(long id, CancellationToken ct = default)
             => throw new NotSupportedException();
+        public Task<PendingSyncCounts> GetPendingCountsAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 
     // ---- 0. original end-to-end round trip -----------------------------------
@@ -464,6 +466,44 @@ public sealed class StorageRepositoryTests
             await svc.Events.UpsertAsync(b);
             Assert.NotNull(await svc.Events.GetAsync(a.Id));
             Assert.NotNull(await svc.Events.GetAsync(b.Id));
+        }
+        finally
+        {
+            CleanupDb(path);
+        }
+    }
+
+    // ---- 5b. pending outbox counts -------------------------------------------
+
+    [Fact]
+    public async Task GetPendingCounts_GroupsByKind()
+    {
+        // Distinct event ids so Enqueue does not coalesce rows of the same kind.
+        var (_, svc, path, _, calendarId) = await SetupWithCalendarAsync();
+        try
+        {
+            async Task EnqueueKind(SyncOperationKind kind)
+            {
+                var evt = MakeEvent(calendarId, href: kind == SyncOperationKind.Create ? null : $"/work/{Guid.NewGuid():N}.ics");
+                evt.SyncStatus = SyncStatus.Clean;
+                await svc.Events.UpsertAsync(evt);
+                await svc.SyncOperations.EnqueueAsync(new SyncOperation
+                {
+                    EventId = evt.Id,
+                    Kind = kind,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
+            await EnqueueKind(SyncOperationKind.Create);
+            await EnqueueKind(SyncOperationKind.Create);
+            await EnqueueKind(SyncOperationKind.Update);
+            await EnqueueKind(SyncOperationKind.Update);
+            await EnqueueKind(SyncOperationKind.Update);
+            await EnqueueKind(SyncOperationKind.Delete);
+
+            var counts = await svc.SyncOperations.GetPendingCountsAsync();
+            Assert.Equal(new PendingSyncCounts(Create: 2, Update: 3, Delete: 1), counts);
         }
         finally
         {

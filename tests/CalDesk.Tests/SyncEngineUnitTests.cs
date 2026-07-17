@@ -343,5 +343,12 @@ public sealed class SyncEngineUnitTests
             _ops.RemoveAll(o => o.Id == id);
             return Task.CompletedTask;
         }
+        public Task<PendingSyncCounts> GetPendingCountsAsync(CancellationToken ct = default)
+        {
+            var create = _ops.Count(o => o.Kind == SyncOperationKind.Create);
+            var update = _ops.Count(o => o.Kind == SyncOperationKind.Update);
+            var delete = _ops.Count(o => o.Kind == SyncOperationKind.Delete);
+            return Task.FromResult(new PendingSyncCounts(create, update, delete));
+        }
     }
 }

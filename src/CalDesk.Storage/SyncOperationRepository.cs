@@ -157,6 +157,35 @@ internal sealed class SyncOperationRepository : ISyncOperationRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<PendingSyncCounts> GetPendingCountsAsync(CancellationToken ct = default)
+    {
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+        cmd.CommandText = """
+            SELECT operation, COUNT(*) AS cnt
+            FROM sync_operations
+            GROUP BY operation
+            """;
+
+        var create = 0;
+        var update = 0;
+        var delete = 0;
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var kind = DbConvert.TextToEnum<SyncOperationKind>(reader["operation"]);
+            var count = Convert.ToInt32(reader["cnt"], System.Globalization.CultureInfo.InvariantCulture);
+            switch (kind)
+            {
+                case SyncOperationKind.Create: create = count; break;
+                case SyncOperationKind.Update: update = count; break;
+                case SyncOperationKind.Delete: delete = count; break;
+            }
+        }
+
+        return new PendingSyncCounts(create, update, delete);
+    }
+
     private static SyncOperation Map(SqliteDataReader r) => new()
     {
         Id = DbConvert.ToLong(r["id"]),

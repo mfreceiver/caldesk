@@ -57,4 +57,7 @@ public interface ISyncOperationRepository
     Task<IReadOnlyList<SyncOperation>> GetDueAsync(int limit, CancellationToken ct = default);
     Task MarkAttemptedAsync(long id, string? error, DateTimeOffset? nextAttemptAt, CancellationToken ct = default);
     Task RemoveAsync(long id, CancellationToken ct = default);
+
+    /// <summary>Counts of pending outbox rows grouped by operation kind (Create/Update/Delete).</summary>
+    Task<PendingSyncCounts> GetPendingCountsAsync(CancellationToken ct = default);
 }
