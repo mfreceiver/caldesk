@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 using CalDesk.App.Diagnostics;
 using CalDesk.App.Models;
 using CalDesk.App.Services;
@@ -76,6 +78,15 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private CalendarInfo? _selectedCalendar;
 
+    /// <summary>Rows for the "日历管理" panel — one per known calendar. Each row exposes
+    /// bindable <see cref="CalendarRow.IsSelected"/> / <see cref="CalendarRow.Color"/>
+    /// which the user edits; <see cref="SaveCalendarsCommand"/> persists the deltas.</summary>
+    public ObservableCollection<CalendarRow> CalendarRows { get; } = new();
+
+    /// <summary>Current S/M/L font tier mirrored from <see cref="AppSettings.FontSize"/>.
+    /// Bound to the radio-button group in the Display section; setter applies live + persists.</summary>
+    [ObservableProperty] private FontSizeLevel _fontSize;
+
     public SettingsViewModel(StorageServices store, SettingsService settingsService, ICredentialStore credentials, ICalDavClientFactory factory, SyncRunner sync)
     {
         _store = store;
@@ -108,6 +119,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         DefaultDurationMinutes = _settings.DefaultDurationMinutes;
         DefaultReminderMinutes = _settings.DefaultReminderMinutes;
 
+        FontSize = _settings.FontSize;
+
         await RefreshCalendarsAsync();
         SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == _settings.DefaultCalendarId)
                            ?? Calendars.FirstOrDefault();
@@ -119,6 +132,26 @@ public sealed partial class SettingsViewModel : ObservableObject
         var prev = SelectedCalendar?.Id;
         Calendars = list.OrderBy(c => c.DisplayName).ToList();
         SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == prev) ?? Calendars.FirstOrDefault();
+
+        // Rebuild the management rows from the latest stored state. Snapshot IsSelected/Color
+        // at row-build time so SaveCalendarsCommand can diff against the stored values.
+        CalendarRows.Clear();
+        foreach (var c in Calendars)
+        {
+            CalendarRows.Add(new CalendarRow(c));
+        }
+    }
+
+    partial void OnFontSizeChanged(FontSizeLevel value)
+    {
+        // Apply live (swap merged FontSizes dictionary) + persist so the choice survives restart.
+        if (Application.Current is App app)
+        {
+            app.ApplyFontSize(value);
+        }
+
+        _settings.FontSize = value;
+        _settingsService.Save(_settings);
     }
 
     /// <summary>Builds the account row from the form fields (without persisting).</summary>
@@ -195,7 +228,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             _settings.SyncIntervalMinutes = Math.Clamp(SyncIntervalMinutes, 1, 1440);
             _settingsService.Save(_settings);
 
-            // Discover & merge calendars (preserve selection / ordering).
+            // Discover & merge calendars (preserve user-set Color/IsSelected — only backfill missing).
             await using var client = await CreateClientForDiscoveryAsync(account);
             var discovered = await client.DiscoverCalendarsAsync();
             var existing = (await _store.Calendars.GetAllAsync()).ToDictionary(c => c.RemoteUrl);
@@ -204,10 +237,18 @@ public sealed partial class SettingsViewModel : ObservableObject
                 if (existing.TryGetValue(remote.RemoteUrl, out var ex))
                 {
                     ex.DisplayName = remote.DisplayName;
-                    ex.Color = remote.Color;
+                    // T6-C3: never overwrite a user-chosen color — only adopt the server color
+                    // when nothing is stored yet (existing.Color null/empty).
+                    if (string.IsNullOrEmpty(ex.Color))
+                    {
+                        ex.Color = remote.Color;
+                    }
+
+                    // SupportsSyncToken/Ctag are server state, always refresh.
                     ex.SupportsSyncToken = remote.SupportsSyncToken;
                     ex.Ctag = remote.Ctag;
                     ex.AccountId = account.Id;
+                    // ex.IsSelected intentionally preserved — a user-hidden calendar stays hidden.
                     await _store.Calendars.UpsertAsync(ex);
                 }
                 else
@@ -259,6 +300,59 @@ public sealed partial class SettingsViewModel : ObservableObject
         RequestClose?.Invoke();
     }
 
+    /// <summary>Persist per-calendar visibility/color edits (Color + IsSelected) for every row
+    /// whose state differs from what's currently stored, then trigger a view refresh so
+    /// week/month VMs drop/respickup the affected calendars. Mirrors the save-then-refresh
+    /// pattern in <see cref="SaveAccountAsync"/>.</summary>
+    [RelayCommand]
+    private async Task SaveCalendarsAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        StatusText = "正在保存日历设置…";
+        try
+        {
+            var stored = (await _store.Calendars.GetAllAsync()).ToDictionary(c => c.Id);
+            foreach (var row in CalendarRows)
+            {
+                if (!stored.TryGetValue(row.Id, out var cur))
+                {
+                    continue;
+                }
+
+                // Diff against the stored snapshot — only write when something actually changed.
+                if (cur.IsSelected != row.IsSelected || !StringEquals(cur.Color, row.Color))
+                {
+                    var updated = row.ToCalendarInfo(cur);
+                    await _store.Calendars.UpsertAsync(updated);
+                }
+            }
+
+            await RefreshCalendarsAsync();
+
+            // Push a sync-triggered reload so the week/month VMs re-pull with the new selection.
+            await _sync.RunAsync();
+
+            StatusText = "日历设置已保存";
+        }
+        catch (Exception ex)
+        {
+            StatusText = "保存失败：" + ex.Message;
+            Error?.Invoke(ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private static bool StringEquals(string? a, string? b)
+        => string.Equals(a ?? string.Empty, b ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
     [RelayCommand]
     private void Close() => RequestClose?.Invoke();
 
@@ -298,5 +392,54 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         // Interface path has no password / TLS override; use store + factory defaults.
         return await _factory.CreateAsync(account);
+    }
+
+    /// <summary>One row in the "日历管理" panel. Wraps a <see cref="CalendarInfo"/> and exposes
+    /// the two editable fields (<see cref="IsSelected"/>, <see cref="Color"/>) as bindable
+    /// properties. <see cref="ToCalendarInfo"/> produces an updated snapshot for upsert;
+    /// the caller passes the existing stored row so server-side fields (RemoteUrl, SyncToken,
+    /// etc.) are preserved.</summary>
+    public sealed partial class CalendarRow : ObservableObject
+    {
+        private readonly CalendarInfo _source;
+
+        public CalendarRow(CalendarInfo source)
+        {
+            _source = source;
+            _isSelected = source.IsSelected;
+            _color = source.Color;
+        }
+
+        public Guid Id => _source.Id;
+
+        public string DisplayName => _source.DisplayName;
+
+        /// <summary>Account id (used for diagnostics / future grouping; not shown directly).</summary>
+        public Guid AccountId => _source.AccountId;
+
+        [ObservableProperty] private bool _isSelected;
+        [ObservableProperty] private string? _color;
+
+        /// <summary>Build an updated <see cref="CalendarInfo"/> to upsert. Server-managed
+        /// fields (RemoteUrl, SyncToken, Ctag, SupportsSyncToken, SortOrder, UpdatedAt) are
+        /// carried over from <paramref name="baseline"/>; only IsSelected + Color come from
+        /// the row edits (and UpdatedAt is bumped to signal the user touch).</summary>
+        public CalendarInfo ToCalendarInfo(CalendarInfo baseline)
+        {
+            return new CalendarInfo
+            {
+                Id = baseline.Id,
+                AccountId = baseline.AccountId,
+                RemoteUrl = baseline.RemoteUrl,
+                DisplayName = baseline.DisplayName,
+                Color = Color,
+                SortOrder = baseline.SortOrder,
+                SupportsSyncToken = baseline.SupportsSyncToken,
+                Ctag = baseline.Ctag,
+                SyncToken = baseline.SyncToken,
+                IsSelected = IsSelected,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
+        }
     }
 }
