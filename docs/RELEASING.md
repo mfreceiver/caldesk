@@ -23,15 +23,12 @@ git push origin main <new-tag>            # e.g. v0.1.1
 ```
 首次发版（无历史 tag）→ `./scripts/release.sh patch` 初始化为 `v0.1.0`。
 
-**Windows 发布带干净版本号的 EXE**（在 Windows 上，或经 `REMOTE-BUILD.md` 远程）：
+**Windows 发布带干净版本号的 EXE**（产物 → `<repo>\release\CalDesk.exe`）：
 ```powershell
-dotnet publish src/CalDesk.App/CalDesk.App.csproj -c Release -r win-x64 `
-  --self-contained false -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true `
-  -p:ReleaseVersion=<tag>      # e.g. 0.1.0；不带则 versionName 自带 <tag>-<hash>
+powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version <tag>   # e.g. 0.1.0
+# 不带 -Version 则 versionName 自带 <tag>-<hash>（同版本族小修复可直接发，文件版本号更高、可覆盖升级）
 ```
-> 同版本族小修复：commit 后直接 `dotnet publish`（**不带** `-p:ReleaseVersion`）→ EXE 自带
-> `<tag>-<hash>`、文件版本号更高，可覆盖升级，无需新 tag。
+> `scripts/publish.ps1` = single-file + 去 pdb + framework-dependent，输出到 `release\`（gitignored）。
 
 ## 3. 公开镜像 → GitHub（干净单提交历史）
 **为什么不能直接推全历史**：历史里曾含私人 CalDAV 密码/URL（即使在私有 Gitea 也别推到公开）。

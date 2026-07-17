@@ -36,11 +36,11 @@ dotnet test tests/CalDesk.Tests --nologo    # 离线单测全绿；live 集成�
 ```bash
 ssh winbuild 'cd C:\Dev_Code\caldesk && git -c credential.helper= pull && dotnet build CalDesk.slnx -c Debug && dotnet test tests/CalDesk.Tests'
 ```
-本地发布单文件 EXE：
-```powershell
-dotnet publish src/CalDesk.App/CalDesk.App.csproj -c Release -r win-x64 --self-contained false `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableWindowsTargeting=true
+发布单文件 EXE（产物到 `<repo>\release\CalDesk.exe`）：
+```bash
+ssh winbuild 'cd C:\Dev_Code\caldesk && powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version 0.1.0'
 ```
+> `scripts/publish.ps1`（single-file、去 pdb、framework-dependent）；`release/` 已 gitignore。
 
 ## 版本号（git 派生，禁止手写）
 版本**不写在任何文件里**，由 `Directory.Version.props` 在构建期从 git 派生：

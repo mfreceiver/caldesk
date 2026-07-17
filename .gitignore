@@ -20,5 +20,8 @@ appsettings.*.local.json
 .env
 secrets.json
 
+## Release output (scripts/publish.ps1 writes the single-file EXE here)
+release/
+
 ## Local / private notes (never commit personal deployment specifics)
 docs/LOCAL.md

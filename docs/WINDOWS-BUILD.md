@@ -18,7 +18,7 @@ dotnet test tests/CalDesk.Tests --nologo        # 目标：45/45 通过
 ```
 - 解决方案是 **`CalDesk.slnx`**（不是 `.sln`）。
 - 需要 **Windows** 才能编译（`CalDesk.App` 是 WPF，`net10.0-windows`）。
-- 若要发布单文件 EXE：见 `docs/BUILD.md` 第三节（framework-dependent，win-x64，产物约 28 MB）。
+- 发布单文件 EXE：`powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version 0.1.0`（产物 → `release\CalDesk.exe`，~29 MB，framework-dependent）。
 
 ## 三、Windows 构建适配（已提交，`git pull` 后即编即测）
 > 让上游（Linux 编写）的代码在 Windows 上通过编译/测试所需的改动，**全部位于 `src/CalDesk.App/**` 与 `tests/**`，未改核心库**。已在 `131ebeb` 提交回远端，无需手工补。

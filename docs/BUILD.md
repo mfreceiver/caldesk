@@ -21,14 +21,9 @@ cd caldesk
 # (可选) 跑一遍库的单元测试（不含 WPF）
 dotnet test tests/CalDesk.Tests
 
-# 发布：framework-dependent 单文件 EXE
-dotnet publish src/CalDesk.App/CalDesk.App.csproj `
-  -c Release `
-  -r win-x64 `
-  --self-contained false `
-  -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:EnableWindowsTargeting=true
+# 发布：framework-dependent 单文件 EXE（产物 -> release\CalDesk.exe）
+powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version 0.1.0
+# 见 scripts/publish.ps1（single-file + 去 pdb；release/ 已 gitignore）
 ```
 
 产物在：
