@@ -22,7 +22,7 @@
 ## 3. 不可违反的约束
 1. **不要改动核心库**（`src/CalDesk.Core | CalDav | Storage`）。它们在 Linux 上 0 错构建、45/45 单测 + 真机同步全绿，是稳的。修编译错误**只在 `src/CalDesk.App/**` 和 `tests/CalDesk.Tests/**` 内**进行。若某编译错误的根因在库的公共 API → **停下告诉我**，不要擅自改库。
 2. **不要回退以下已确认的修复**：
-   - H.NotifyIcon.Wpf 2.2.0：xmlns 用 `clr-namespace:H.NotifyIcon;assembly=H.NotifyIcon.Wpf`。托盘 `IconSource` 现在绑定应用 logo（`<BitmapImage UriSource="pack://application:,,,/Assets/icon.png"/>`，由 `misc/icon.svg` 生成），**不是** `GeneratedIcon`/`GeneratedIconSource`，别改回文本生成图标。EXE/窗口图标靠 `<ApplicationIcon>Assets\app.ico</ApplicationIcon>`（多分辨率 16/32/48/256，已含）。`Assets\app.ico` 和 `Assets\icon.png` 都是 `<Resource>`。
+   - H.NotifyIcon.Wpf 2.2.0：xmlns 用 `clr-namespace:H.NotifyIcon;assembly=H.NotifyIcon.Wpf`。托盘 `IconSource` 现在绑定应用 logo（`<BitmapImage UriSource="pack://application:,,,/Assets/app.ico"/>`，由 `misc/icon.svg` 生成），**不是** `GeneratedIcon`/`GeneratedIconSource`，别改回文本生成图标。EXE/窗口图标靠 `<ApplicationIcon>Assets\app.ico</ApplicationIcon>`（多分辨率 16/32/48/256，已含）。`Assets\app.ico` 和 `Assets\icon.png` 都是 `<Resource>`。
    - `Win32` 与 `WindowsCredentialStore` 的类**必须是 `partial`**（`LibraryImport` 源生器要求），别去掉。
    - 托盘显形靠 `TaskbarIcon.ForceCreate(enablesEfficiencyMode: false)`；通知用 **`ShowNotification(title, message)`**（不是 `ShowBalloonTip`）。
 3. **CommunityToolkit.Mvvm 用源生器**：`[ObservableProperty] private string _foo;` 会生成 `Foo` 属性；`[RelayCommand] private void X()` 生成 `XCommand`。XAML 绑定这些**生成成员是对的**，别因“找不到手写定义”误判为错误。

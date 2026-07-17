@@ -148,14 +148,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         StatusText = "正在测试连接…";
         try
         {
-            // Reflect the in-form TLS choice so the factory uses it for this attempt.
-            _settings.AcceptInsecureTls = AcceptInsecureTls;
-
             var account = await GetFormAccountAsync();
-            // Never persist from "测试连接" — a typo must not clobber a good stored secret.
-            // Non-empty Password is used only for this probe; empty keeps the stored secret.
-            // Persistence stays in SaveAccountAsync only.
-            await using var client = await CreateClientForDiscoveryAsync(account, passwordOverride: Password);
+            // Never persist from "测试连接" — no credential writes, no TLS settings mutation.
+            // Form password (if any) and form AcceptInsecureTls apply to this probe client only.
+            // Persistence stays in SaveAccountAsync / SaveProperties only.
+            await using var client = await CreateClientForDiscoveryAsync(
+                account,
+                passwordOverride: Password,
+                acceptInsecureTls: AcceptInsecureTls);
             var discovered = await client.DiscoverCalendarsAsync();
             StatusText = $"连接成功，发现 {discovered.Count} 个日历";
         }
@@ -271,20 +271,32 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Create a CalDAV client for discovery, wiring a step logger into
     /// <c>%AppData%\CalDesk\caldesk.log</c> when the concrete factory is available.
     /// When <paramref name="passwordOverride"/> is non-empty, that secret is used for Basic
-    /// auth without writing to <see cref="ICredentialStore"/> (for connection probes).</summary>
-    private Task<ICalDavClient> CreateClientForDiscoveryAsync(Account account, string? passwordOverride = null)
+    /// auth without writing to <see cref="ICredentialStore"/> (for connection probes).
+    /// When <paramref name="acceptInsecureTls"/> is set, TLS policy applies to this client
+    /// only and does not mutate <see cref="SettingsService.Current"/>.</summary>
+    private async Task<ICalDavClient> CreateClientForDiscoveryAsync(
+        Account account,
+        string? passwordOverride = null,
+        bool? acceptInsecureTls = null)
     {
         if (_factory is CalDavClientFactory concrete)
         {
             if (!string.IsNullOrEmpty(passwordOverride))
             {
-                return Task.FromResult(concrete.CreateWithPassword(account, passwordOverride, StartupLog.Log));
+                return concrete.CreateWithPassword(account, passwordOverride, StartupLog.Log, acceptInsecureTls);
             }
 
-            return concrete.CreateAsync(account, StartupLog.Log);
+            if (acceptInsecureTls.HasValue)
+            {
+                // Probe with form TLS; password from store (empty override means keep stored secret).
+                var password = await _credentials.GetPasswordAsync(account.CredentialTarget) ?? string.Empty;
+                return concrete.CreateWithPassword(account, password, StartupLog.Log, acceptInsecureTls);
+            }
+
+            return await concrete.CreateAsync(account, StartupLog.Log);
         }
 
-        // Interface path has no password override; empty Password ⇒ use store as usual.
-        return _factory.CreateAsync(account);
+        // Interface path has no password / TLS override; use store + factory defaults.
+        return await _factory.CreateAsync(account);
     }
 }
