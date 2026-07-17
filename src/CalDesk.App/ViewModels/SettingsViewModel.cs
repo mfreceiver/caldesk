@@ -21,26 +21,46 @@ public sealed partial class SettingsViewModel : ObservableObject
     public event Action? RequestClose;
     public event Action<string>? Error;
 
+    // ---- CalDAV account ----
     [ObservableProperty] private string _serverUrl = string.Empty;
     [ObservableProperty] private string _username = string.Empty;
     [ObservableProperty] private string _password = string.Empty;
-    [ObservableProperty] private WindowMode _windowMode = WindowMode.Normal;
+    [ObservableProperty] private bool _acceptInsecureTls;
+    [ObservableProperty] private int _syncIntervalMinutes = 5;
+
+    // ---- desktop window ----
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLockPositionEnabled))]
+    private WindowMode _windowMode = WindowMode.Normal;
+
     [ObservableProperty] private double _opacity = 0.92;
     [ObservableProperty] private bool _lockedPosition;
     [ObservableProperty] private bool _startWithWindows;
+
+    // ---- defaults ----
     [ObservableProperty] private int _defaultDurationMinutes = 60;
     [ObservableProperty] private int _defaultReminderMinutes = 15;
-    [ObservableProperty] private int _syncIntervalMinutes = 5;
+
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSave))]
+    [NotifyPropertyChangedFor(nameof(CanSaveAccount), nameof(CanTestConnection))]
     private bool _isBusy;
 
-    public bool CanSave => !IsBusy;
+    [ObservableProperty] private string _statusText = string.Empty;
 
+    /// <summary>Lock-position only has effect in Desktop-bottom mode; disabled otherwise.</summary>
+    public bool IsLockPositionEnabled => WindowMode == WindowMode.Desktop;
+
+    public bool CanSaveAccount => !IsBusy;
+    public bool CanTestConnection => !IsBusy;
+
+    /// <summary>Calendars discovered on the server (populated after connect). Empty until connected.</summary>
     [ObservableProperty]
-    private string _statusText = string.Empty;
+    [NotifyPropertyChangedFor(nameof(HasCalendars))]
+    private List<CalendarInfo> _calendars = new();
 
-    public WindowMode[] WindowModes { get; } = Enum.GetValues<WindowMode>();
+    public bool HasCalendars => Calendars.Count > 0;
+
+    [ObservableProperty] private CalendarInfo? _selectedCalendar;
 
     public SettingsViewModel(StorageServices store, SettingsService settingsService, ICredentialStore credentials, ICalDavClientFactory factory, SyncRunner sync)
     {
@@ -58,17 +78,47 @@ public sealed partial class SettingsViewModel : ObservableObject
         ServerUrl = account?.ServerUrl ?? string.Empty;
         Username = account?.Username ?? string.Empty;
 
+        AcceptInsecureTls = _settings.AcceptInsecureTls;
+        SyncIntervalMinutes = _settings.SyncIntervalMinutes;
+
         WindowMode = _settings.WindowMode;
         Opacity = _settings.Opacity;
         LockedPosition = _settings.LockedPosition;
         StartWithWindows = _settings.StartWithWindows;
+
         DefaultDurationMinutes = _settings.DefaultDurationMinutes;
         DefaultReminderMinutes = _settings.DefaultReminderMinutes;
-        SyncIntervalMinutes = _settings.SyncIntervalMinutes;
+
+        await RefreshCalendarsAsync();
+        SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == _settings.DefaultCalendarId)
+                           ?? Calendars.FirstOrDefault();
     }
 
-    [RelayCommand]
-    private async Task SaveAsync()
+    private async Task RefreshCalendarsAsync()
+    {
+        var list = await _store.Calendars.GetAllAsync();
+        var prev = SelectedCalendar?.Id;
+        Calendars = list.OrderBy(c => c.DisplayName).ToList();
+        SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == prev) ?? Calendars.FirstOrDefault();
+    }
+
+    /// <summary>Builds the account row from the form fields (without persisting).</summary>
+    private async Task<Account> GetFormAccountAsync()
+    {
+        var account = (await _store.Accounts.GetAllAsync()).FirstOrDefault() ?? new Account();
+        account.ServerUrl = ServerUrl.Trim();
+        account.Username = Username.Trim();
+        account.DisplayName = string.IsNullOrWhiteSpace(Username) ? account.DisplayName : Username.Trim();
+        if (string.IsNullOrEmpty(account.CredentialTarget))
+        {
+            account.CredentialTarget = $"CalDesk:account:{account.Id}";
+        }
+
+        return account;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanTestConnection))]
+    private async Task TestConnectionAsync()
     {
         if (IsBusy)
         {
@@ -76,14 +126,45 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         IsBusy = true;
-        StatusText = "正在连接并同步…";
+        StatusText = "正在测试连接…";
         try
         {
-            var account = (await _store.Accounts.GetAllAsync()).FirstOrDefault() ?? new Account();
-            account.ServerUrl = ServerUrl.Trim();
-            account.Username = Username.Trim();
-            account.CredentialTarget = $"CalDesk:account:{account.Id}";
-            account.DisplayName = Username.Trim();
+            // Reflect the in-form TLS choice so the factory uses it for this attempt.
+            _settings.AcceptInsecureTls = AcceptInsecureTls;
+
+            var account = await GetFormAccountAsync();
+            if (!string.IsNullOrEmpty(Password))
+            {
+                await _credentials.SetPasswordAsync(account.CredentialTarget, Password);
+            }
+
+            await using var client = await _factory.CreateAsync(account);
+            var discovered = await client.DiscoverCalendarsAsync();
+            StatusText = $"连接成功，发现 {discovered.Count} 个日历";
+        }
+        catch (Exception ex)
+        {
+            StatusText = "连接失败：" + ex.Message;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSaveAccount))]
+    private async Task SaveAccountAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        StatusText = "正在保存并同步…";
+        try
+        {
+            var account = await GetFormAccountAsync();
             await _store.Accounts.UpsertAsync(account);
 
             if (!string.IsNullOrEmpty(Password))
@@ -91,18 +172,11 @@ public sealed partial class SettingsViewModel : ObservableObject
                 await _credentials.SetPasswordAsync(account.CredentialTarget, Password);
             }
 
-            _settings.WindowMode = WindowMode;
-            _settings.Opacity = Math.Clamp(Opacity, 0.15, 1.0);
-            _settings.LockedPosition = LockedPosition;
-            _settings.StartWithWindows = StartWithWindows;
-            _settings.DefaultDurationMinutes = DefaultDurationMinutes;
-            _settings.DefaultReminderMinutes = DefaultReminderMinutes;
+            _settings.AcceptInsecureTls = AcceptInsecureTls;
             _settings.SyncIntervalMinutes = Math.Clamp(SyncIntervalMinutes, 1, 1440);
             _settingsService.Save(_settings);
 
-            StartupHelper.Set(StartWithWindows, Environment.ProcessPath ?? AppExePath());
-
-            // Discover & merge calendars (preserve user selection / ordering).
+            // Discover & merge calendars (preserve selection / ordering).
             await using var client = await _factory.CreateAsync(account);
             var discovered = await client.DiscoverCalendarsAsync();
             var existing = (await _store.Calendars.GetAllAsync()).ToDictionary(c => c.RemoteUrl);
@@ -128,17 +202,36 @@ public sealed partial class SettingsViewModel : ObservableObject
             _sync.ReapplyInterval(_settings);
             await _sync.RunAsync();
 
-            RequestClose?.Invoke();
+            await RefreshCalendarsAsync();
+            StatusText = "已连接并同步";
         }
         catch (Exception ex)
         {
+            StatusText = "保存失败：" + ex.Message;
             Error?.Invoke(ex.Message);
         }
         finally
         {
             IsBusy = false;
-            StatusText = string.Empty;
         }
+    }
+
+    /// <summary>Saves the non-account properties (window, defaults, autostart) and closes.</summary>
+    [RelayCommand]
+    private void SaveProperties()
+    {
+        _settings.WindowMode = WindowMode;
+        _settings.Opacity = Math.Clamp(Opacity, 0.15, 1.0);
+        // Lock position only applies in Desktop-bottom mode.
+        _settings.LockedPosition = WindowMode == WindowMode.Desktop && LockedPosition;
+        _settings.StartWithWindows = StartWithWindows;
+        _settings.DefaultDurationMinutes = DefaultDurationMinutes;
+        _settings.DefaultReminderMinutes = DefaultReminderMinutes;
+        _settings.DefaultCalendarId = SelectedCalendar?.Id;
+        _settingsService.Save(_settings);
+
+        StartupHelper.Set(StartWithWindows, Environment.ProcessPath ?? AppExePath());
+        RequestClose?.Invoke();
     }
 
     [RelayCommand]

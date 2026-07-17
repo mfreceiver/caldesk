@@ -50,7 +50,7 @@ public partial class App : Application
         _settingsSvc.Load();
 
         _creds = new WindowsCredentialStore();
-        _factory = new CalDavClientFactory(_creds);
+        _factory = new CalDavClientFactory(_creds, () => _settingsSvc.Current.AcceptInsecureTls);
         _viewSvc = new CalendarViewService(new IcalRecurrenceExpander());
         _events = new EventService(_store.Events, _store.SyncOperations);
 

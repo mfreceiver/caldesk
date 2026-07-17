@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Text;
@@ -7,13 +8,15 @@ using CalDesk.Core.Services;
 
 namespace CalDesk.CalDav;
 
-/// <summary>Creates per-account CalDAV clients backed by <see cref="HttpClient"/> with Basic auth.</summary>
+/// <summary>Creates per-account CalDAV clients backed by <see cref="HttpClient"/> with Basic auth.
+/// The “trust all certificates” flag is read via a provider so the user can toggle it in settings
+/// without restarting the app.</summary>
 public sealed class CalDavClientFactory : ICalDavClientFactory
 {
     private readonly ICredentialStore _credentials;
-    private readonly bool _trustAllCertificates;
+    private readonly Func<bool>? _trustAllCertificates;
 
-    public CalDavClientFactory(ICredentialStore credentials, bool trustAllCertificates = false)
+    public CalDavClientFactory(ICredentialStore credentials, Func<bool>? trustAllCertificates = null)
     {
         _credentials = credentials;
         _trustAllCertificates = trustAllCertificates;
@@ -25,7 +28,7 @@ public sealed class CalDavClientFactory : ICalDavClientFactory
         var origin = new Uri(new Uri(account.ServerUrl).GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
 
         var handler = new SocketsHttpHandler();
-        if (_trustAllCertificates)
+        if (_trustAllCertificates?.Invoke() ?? false)
         {
             handler.SslOptions = new SslClientAuthenticationOptions
             {

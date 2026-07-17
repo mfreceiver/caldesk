@@ -19,6 +19,9 @@ public sealed class AppSettings
 
     public bool StartWithWindows { get; set; }
 
+    /// <summary>When true, skip remote certificate validation (self-signed / internal CA servers).</summary>
+    public bool AcceptInsecureTls { get; set; }
+
     public double WindowLeft { get; set; } = double.NaN;
     public double WindowTop { get; set; } = double.NaN;
     public string? ScreenDeviceName { get; set; }
