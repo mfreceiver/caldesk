@@ -8,7 +8,7 @@
                         ToolTipText="CalDesk"
                         TrayLeftMouseDoubleClick="OnShowWindow">
             <tb:TaskbarIcon.IconSource>
-                <BitmapImage UriSource="pack://application:,,,/Assets/icon.png" />
+                <BitmapImage UriSource="pack://application:,,,/Assets/app.ico" />
             </tb:TaskbarIcon.IconSource>
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
