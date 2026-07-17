@@ -13,7 +13,9 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
     /// <summary>Shared weekday headers (Mon..Sun, Chinese).</summary>
     public static IReadOnlyList<string> Headers => WeekdayNames;
 
-    /// <summary>Build a 7-day week view starting at <paramref name="weekStartMonday"/>.</summary>
+    /// <summary>Build a 7-day week view starting at <paramref name="weekStartMonday"/>.
+    /// The full visible week is rendered (past / present / future); only
+    /// <see cref="WeekDay.IsToday"/> and <see cref="OccurrenceItem.IsOngoing"/> mark the present.</summary>
     public WeekView BuildWeek(
         IEnumerable<CalendarEvent> events,
         IReadOnlyDictionary<Guid, CalendarInfo> calendars,
@@ -22,10 +24,10 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         DateOnly today,
         DateTimeOffset nowUtc)
     {
-        // Week view auto-hides fully-past occurrences to reduce clutter.
+        // Do not hide past occurrences — the whole week (WeekStart..+7) must stay populated.
         var byDay = BucketByDay(
             events, calendars, weekStartMonday, weekStartMonday.AddDays(7),
-            displayTz, nowUtc, hideFullyPastBefore: today);
+            displayTz, nowUtc, hideFullyPastBefore: null);
 
         var days = new List<WeekDay>(7);
         for (var i = 0; i < 7; i++)
@@ -128,7 +130,8 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
 
     /// <summary>Expand every event in range and bucket occurrences by their local start-day.
     /// Shared by week and month views. <paramref name="hideFullyPastBefore"/> (when set) drops
-    /// occurrences that ended at/before that date's local midnight — used only by the week view.</summary>
+    /// occurrences that ended at/before that date's local midnight. Week and month both pass
+    /// null so the full visible range stays populated.</summary>
     private Dictionary<DateOnly, List<OccurrenceItem>> BucketByDay(
         IEnumerable<CalendarEvent> events,
         IReadOnlyDictionary<Guid, CalendarInfo> calendars,

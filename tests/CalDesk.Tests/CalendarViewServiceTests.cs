@@ -38,8 +38,8 @@ public sealed class CalendarViewServiceTests
         var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() { Color = "#ff0000" } };
         var events = new[]
         {
-            Ev(13, 9, 0, 10, 0, summary: "Mon", calId: calId),     // past -> hidden
-            Ev(14, 9, 0, 10, 0, summary: "Tue", calId: calId),     // past -> hidden
+            Ev(13, 9, 0, 10, 0, summary: "Mon", calId: calId),
+            Ev(14, 9, 0, 10, 0, summary: "Tue", calId: calId),
             Ev(15, 9, 0, 11, 0, summary: "WedOngoing", calId: calId),
             Ev(16, 0, 0, 0, 0, allDay: true, summary: "ThuAllDay", calId: calId), // Thu 00:00 .. Fri 00:00
             Ev(16, 14, 0, 15, 0, summary: "Thu14", calId: calId),
@@ -52,8 +52,10 @@ public sealed class CalendarViewServiceTests
 
         Assert.Equal(7, view.Days.Count);
         Assert.Equal("周一 13", view.Days[0].Header);
-        Assert.True(view.Days[0].IsEmpty);   // Monday hidden (past)
-        Assert.True(view.Days[1].IsEmpty);   // Tuesday hidden (past)
+        Assert.Single(view.Days[0].Timed);  // past Monday still shown
+        Assert.Equal("Mon", view.Days[0].Timed[0].Summary);
+        Assert.Single(view.Days[1].Timed);  // past Tuesday still shown
+        Assert.Equal("Tue", view.Days[1].Timed[0].Summary);
 
         Assert.True(view.Days[2].IsToday);
         Assert.Single(view.Days[2].Timed);
@@ -67,6 +69,42 @@ public sealed class CalendarViewServiceTests
         Assert.Equal("14:00", view.Days[3].Timed[0].TimeLabel);
 
         Assert.True(view.HasAny);
+    }
+
+    /// <summary>
+    /// Week view must show the full visible week: past days and earlier-today events that already
+    /// ended still render. Only "今天" / IsOngoing styling distinguishes present from past.
+    /// </summary>
+    [Fact]
+    public void BuildWeek_IncludesPastDaysAndEarlierTodayEndedEvents()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() { Color = "#abc" } };
+        // Now = Wed 10:00. Include yesterday + this morning (already ended) + ongoing + future.
+        var events = new[]
+        {
+            Ev(14, 15, 0, 16, 0, summary: "Yesterday", calId: calId),       // Tue — fully past day
+            Ev(15, 7, 0, 8, 0, summary: "EarlierToday", calId: calId),      // Wed 07–08, ended 2h ago
+            Ev(15, 9, 0, 11, 0, summary: "Ongoing", calId: calId),          // Wed 09–11, ongoing at 10:00
+            Ev(16, 14, 0, 15, 0, summary: "Tomorrow", calId: calId),
+        };
+
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildWeek(events, calendars, Monday, Tz, Today, Now);
+
+        Assert.Single(view.Days[1].Timed);
+        Assert.Equal("Yesterday", view.Days[1].Timed[0].Summary);
+        Assert.False(view.Days[1].Timed[0].IsOngoing);
+
+        Assert.Equal(2, view.Days[2].Timed.Count);
+        Assert.Equal("EarlierToday", view.Days[2].Timed[0].Summary);
+        Assert.False(view.Days[2].Timed[0].IsOngoing);
+        Assert.Equal("Ongoing", view.Days[2].Timed[1].Summary);
+        Assert.True(view.Days[2].Timed[1].IsOngoing);
+        Assert.True(view.Days[2].IsToday);
+
+        Assert.Single(view.Days[3].Timed);
+        Assert.Equal("Tomorrow", view.Days[3].Timed[0].Summary);
     }
 
     [Fact]
@@ -131,7 +169,7 @@ public sealed class CalendarViewServiceTests
         var svc = new CalendarViewService(new StubExpander());
         var view = svc.BuildMonth(events, calendars, 2026, 7, Tz, Today, Now);
 
-        // Past NOT hidden (unlike the week view): Jul 1 still shows.
+        // Past NOT hidden: Jul 1 still shows.
         Assert.Equal(1, CellAt(view, 7, 1).OccurrenceCount);
 
         var d20 = CellAt(view, 7, 20);
