@@ -60,8 +60,10 @@ git push origin main
 ```
 
 ### 3.3 发布前自检（无私人信息残留）
+把 `docs/LOCAL.md` 里记录的每个私有串（服务器域名、token、账号路径、密码）依次 grep，确认公开工作树里**只剩 `docs/LOCAL.md` 命中**：
 ```bash
-grep -rn -E "vectory|Ap337|/mar/|\bradical\b|mfreceiver@|:18443" \
+# 把下面的占位符换成 docs/LOCAL.md 里的实际私有串
+grep -rn -E "<private-domain>|<private-token>|<private-account-path>|<private-password>" \
   --include='*.md' --include='*.cs' --include='*.xaml' . | grep -v docs/LOCAL.md
 # 期望：无输出（真实私有值只在 gitignored 的 docs/LOCAL.md）
 ```
