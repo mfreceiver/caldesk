@@ -8,6 +8,8 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/FontSizes.S.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="HeaderBrushWeek" Color="#FFF1F3F9" />
+            <SolidColorBrush x:Key="HeaderBrushMonth" Color="#FFF6F1F4" />
             <tb:TaskbarIcon x:Key="TrayIcon"
                             ToolTipText="CalDesk"
                             TrayLeftMouseDoubleClick="OnShowWindow">
