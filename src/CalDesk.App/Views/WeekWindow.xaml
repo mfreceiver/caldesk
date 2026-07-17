@@ -124,6 +124,9 @@
                                     <Style TargetType="Border">
                                         <Setter Property="Background" Value="#0D000000" />
                                         <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsWeekend}" Value="True">
+                                                <Setter Property="Background" Value="#14000000" />
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                 <Setter Property="Background" Value="#143B82F6" />
                                             </DataTrigger>

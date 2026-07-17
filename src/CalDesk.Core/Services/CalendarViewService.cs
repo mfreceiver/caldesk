@@ -42,6 +42,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                 Date = date,
                 Header = $"{WeekdayNames[i]} {date.Day}",
                 IsToday = date == today,
+                IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                 AllDay = all,
                 Timed = timed,
             });
