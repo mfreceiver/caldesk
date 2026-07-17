@@ -31,6 +31,15 @@ public sealed partial class MonthViewModel : ObservableObject
     private MonthView? _month;
 
     [ObservableProperty]
+    private DateOnly? _selectedDate;
+
+    [ObservableProperty]
+    private WeekDay? _selectedDay;
+
+    /// <summary>Top/bottom split share (0–1, top portion). Persisted/restored by the view.</summary>
+    public double SplitRatio { get; set; } = 0.6;
+
+    [ObservableProperty]
     private int _year;
 
     [ObservableProperty]
@@ -101,6 +110,28 @@ public sealed partial class MonthViewModel : ObservableObject
         if (v != Volatile.Read(ref _navVersion))
             return;
         Month = built;
+        // Default-select today after the first successful month load so the bottom panel is not empty.
+        if (SelectedDate is null)
+        {
+            await SelectDay(today);
+        }
+    }
+
+    /// <summary>Selects a single day and builds its detail (all-day + timed) for the bottom panel.
+    /// Safe to call at any time — uses a 1-day range around <paramref name="date"/>.</summary>
+    [RelayCommand]
+    private async Task SelectDay(DateOnly date)
+    {
+        SelectedDate = date;
+        var tz = TimeZoneInfo.Local;
+        var rangeStart = LocalMidnightToUtc(date, tz);
+        var rangeEnd = LocalMidnightToUtc(date.AddDays(1), tz);
+        var allCals = await _store.Calendars.GetAllAsync();
+        var calMap = allCals.ToDictionary(c => c.Id);
+        var selectedIds = allCals.Where(c => c.IsSelected).Select(c => c.Id).ToArray();
+        var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        SelectedDay = _viewService.BuildDay(stored, calMap, date, tz, today, DateTimeOffset.UtcNow);
     }
 
     [RelayCommand]

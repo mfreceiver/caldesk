@@ -47,6 +47,9 @@ public sealed class MonthDay
     /// <summary>Events beyond the visible preview (count &gt; 3 ⇒ count-2). 0 when ≤3.</summary>
     public int OverflowCount { get; init; }
 
+    /// <summary>True when there are hidden events beyond the preview (OverflowCount &gt; 0).</summary>
+    public bool HasOverflow => OverflowCount > 0;
+
     /// <summary>Compact preview rows for the cell (all-day first, then timed, capped at <see cref="MonthViewOptions.PreviewLimit"/>).</summary>
     public required IReadOnlyList<MonthOccurrence> Preview { get; init; }
 }

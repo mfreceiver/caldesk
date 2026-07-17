@@ -1,9 +1,10 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using CalDesk.App.ViewModels;
 using CalDesk.App.Windowing;
-using CalDesk.Core.Models;
 
 namespace CalDesk.App.Views;
 
@@ -37,16 +38,6 @@ public partial class MonthWindow : Window
         }
     }
 
-    /// <summary>Double-click an empty area of a day cell to add an event on that date.</summary>
-    private void OnCellAdd(object? sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount >= 2 && sender is FrameworkElement fe && fe.DataContext is MonthDay day)
-        {
-            ViewModel.AddNewCommand.Execute(day.Date);
-            e.Handled = true;
-        }
-    }
-
     private void OnBackToWeek(object sender, RoutedEventArgs e) => BackRequested?.Invoke();
 
     // Borderless-resize (WM_NCHITTEST) + DPI crispness flags are attached once the Win32 hwnd exists.
@@ -63,5 +54,32 @@ public partial class MonthWindow : Window
         e.Cancel = true;
         Hide();
         base.OnClosing(e);
+    }
+
+    // --- Top/bottom split ratio persistence (GridSplitter Row2↔Row4) ---
+
+    private void OnLoaded(object sender, RoutedEventArgs e) => ApplySplitRatio(ViewModel.SplitRatio);
+
+    private void OnSplitChanged(object sender, DragCompletedEventArgs e)
+    {
+        var top = RootGrid.RowDefinitions[2].ActualHeight;
+        var bottom = RootGrid.RowDefinitions[4].ActualHeight;
+        var total = top + bottom;
+        if (total > 0)
+        {
+            ViewModel.SplitRatio = top / total;
+            ApplySplitRatio(ViewModel.SplitRatio);
+        }
+    }
+
+    private void ApplySplitRatio(double ratio)
+    {
+        if (double.IsNaN(ratio) || ratio <= 0.02 || ratio >= 0.98)
+        {
+            return;
+        }
+
+        RootGrid.RowDefinitions[2].Height = new GridLength(ratio * 100.0, GridUnitType.Star);
+        RootGrid.RowDefinitions[4].Height = new GridLength((1.0 - ratio) * 100.0, GridUnitType.Star);
     }
 }
