@@ -9,6 +9,7 @@
     <SatelliteResourceLanguages>zh-CN;en</SatelliteResourceLanguages>
     <!-- Allow restore/design-time on non-Windows (actual WPF compile still requires Windows) -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +21,12 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.2.0" />
+  </ItemGroup>
+
+  <!-- App icon / logo (generated from misc/icon.svg): EXE icon + tray/logo resources. -->
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\icon.png" />
   </ItemGroup>
 
 </Project>

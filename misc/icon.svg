@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1024"
+     height="1024"
+     viewBox="0 0 1024 1024"
+     fill="none">
+
+  <defs>
+    <linearGradient id="headerGradient" x1="250" y1="190" x2="790" y2="380"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F43A3F"/>
+      <stop offset="1" stop-color="#ED3036"/>
+    </linearGradient>
+
+    <linearGradient id="cellGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E2E3E5"/>
+      <stop offset="1" stop-color="#D5D7DA"/>
+    </linearGradient>
+
+    <linearGradient id="pinTopGradient" x1="-40" y1="-40" x2="42" y2="32">
+      <stop offset="0" stop-color="#F44347"/>
+      <stop offset="1" stop-color="#E72F34"/>
+    </linearGradient>
+
+    <linearGradient id="pinBodyGradient" x1="-26" y1="0" x2="28" y2="0">
+      <stop offset="0" stop-color="#BE292E"/>
+      <stop offset="0.5" stop-color="#D53338"/>
+      <stop offset="1" stop-color="#B9252A"/>
+    </linearGradient>
+
+    <linearGradient id="pinBaseGradient" x1="-52" y1="28" x2="55" y2="92">
+      <stop offset="0" stop-color="#E5363B"/>
+      <stop offset="1" stop-color="#C9272C"/>
+    </linearGradient>
+
+    <filter id="calendarShadow"
+            x="130"
+            y="130"
+            width="770"
+            height="800"
+            filterUnits="userSpaceOnUse"
+            color-interpolation-filters="sRGB">
+      <feDropShadow dx="0"
+                    dy="22"
+                    stdDeviation="22"
+                    flood-color="#60646A"
+                    flood-opacity="0.20"/>
+    </filter>
+
+    <filter id="pinShadow"
+            x="-110"
+            y="-110"
+            width="240"
+            height="260"
+            filterUnits="userSpaceOnUse"
+            color-interpolation-filters="sRGB">
+      <feDropShadow dx="8"
+                    dy="14"
+                    stdDeviation="12"
+                    flood-color="#7A161B"
+                    flood-opacity="0.30"/>
+    </filter>
+
+    <clipPath id="calendarClip">
+      <rect x="188"
+            y="178"
+            width="648"
+            height="684"
+            rx="84"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+
+  <!-- Calendar -->
+  <g filter="url(#calendarShadow)">
+    <rect x="188"
+          y="178"
+          width="648"
+          height="684"
+          rx="84"
+          fill="#FFFFFF"/>
+
+    <g clip-path="url(#calendarClip)">
+      <!-- Red header -->
+      <rect x="188"
+            y="178"
+            width="648"
+            height="194"
+            fill="url(#headerGradient)"/>
+
+      <!-- White calendar body -->
+      <rect x="188"
+            y="372"
+            width="648"
+            height="490"
+            fill="#FFFFFF"/>
+    </g>
+
+    <!-- Subtle outline -->
+    <rect x="190"
+          y="180"
+          width="644"
+          height="680"
+          rx="82"
+          stroke="#ECEDEF"
+          stroke-width="4"/>
+  </g>
+
+  <!-- Header marks -->
+  <rect x="398"
+        y="262"
+        width="216"
+        height="31"
+        rx="15.5"
+        fill="#FFFFFF"/>
+
+  <rect x="646"
+        y="262"
+        width="74"
+        height="31"
+        rx="15.5"
+        fill="#FFD6D8"
+        opacity="0.88"/>
+
+  <!-- Push pin -->
+  <g transform="translate(300 185) rotate(-15)"
+     filter="url(#pinShadow)">
+
+    <!-- Lower plastic flange -->
+    <ellipse cx="0"
+             cy="74"
+             rx="61"
+             ry="43"
+             fill="#B92328"/>
+
+    <path d="M-60 64
+             C-56 39 -31 22 1 22
+             C34 22 59 40 61 66
+             C63 92 38 111 2 113
+             C-34 114 -63 94 -60 64Z"
+          fill="url(#pinBaseGradient)"/>
+
+    <!-- Central plastic shaft -->
+    <path d="M-25 -3
+             C-25 -13 -16 -20 -5 -20
+             H7
+             C18 -20 26 -12 26 -2
+             L24 62
+             C24 76 14 84 0 84
+             C-14 84 -24 76 -24 62Z"
+          fill="url(#pinBodyGradient)"/>
+
+    <!-- Upper cap rim -->
+    <ellipse cx="0"
+             cy="-12"
+             rx="51"
+             ry="36"
+             fill="#C9282D"/>
+
+    <!-- Upper plastic cap -->
+    <ellipse cx="0"
+             cy="-23"
+             rx="52"
+             ry="38"
+             fill="url(#pinTopGradient)"/>
+  </g>
+
+  <!-- 4 × 4 calendar grid -->
+  <g fill="url(#cellGradient)">
+    <!-- Row 1 -->
+    <rect x="298" y="420" width="76" height="76" rx="12"/>
+    <rect x="408" y="420" width="76" height="76" rx="12"/>
+    <rect x="518" y="420" width="76" height="76" rx="12"/>
+    <rect x="628" y="420" width="76" height="76" rx="12"/>
+
+    <!-- Row 2 -->
+    <rect x="298" y="526" width="76" height="76" rx="12"/>
+    <rect x="408" y="526" width="76" height="76" rx="12"/>
+    <rect x="518" y="526" width="76" height="76" rx="12"/>
+    <rect x="628" y="526" width="76" height="76" rx="12"/>
+
+    <!-- Row 3 -->
+    <rect x="298" y="632" width="76" height="76" rx="12"/>
+    <rect x="408" y="632" width="76" height="76" rx="12"/>
+    <rect x="628" y="632" width="76" height="76" rx="12"/>
+
+    <!-- Row 4 -->
+    <rect x="298" y="738" width="76" height="76" rx="12"/>
+    <rect x="408" y="738" width="76" height="76" rx="12"/>
+    <rect x="518" y="738" width="76" height="76" rx="12"/>
+    <rect x="628" y="738" width="76" height="76" rx="12"/>
+  </g>
+
+  <!-- Selected date -->
+  <rect x="518"
+        y="632"
+        width="76"
+        height="76"
+        rx="12"
+        fill="#F1373C"/>
+
+</svg>
