@@ -1,4 +1,5 @@
 using CalDesk.CalDav.Calendar;
+using CalDesk.Core;
 using CalDesk.Core.Models;
 using Xunit;
 
@@ -54,6 +55,7 @@ public sealed class IcalMapperTests
     public void No_DtEnd_No_Duration_AllDay_Defaults_To_NextDay()
     {
         // RFC 5545 §3.6.1: a DATE-valued (all-day) VEVENT without DTEND/DURATION spans one day.
+        // DATE maps to local midnight (TimeZoneInfo.Local), exclusive end = next local midnight.
         var ics = VCalendarHead +
                   "BEGIN:VEVENT\r\n" +
                   "UID:allday\r\n" +
@@ -66,8 +68,78 @@ public sealed class IcalMapperTests
 
         var evt = Assert.Single(parsed);
         Assert.True(evt.IsAllDay);
-        var expectedStart = new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
-        Assert.Equal(expectedStart.AddDays(1), evt.EndUtc);
+        var expectedStart = AllDayDate.ToUtcInstant(new DateOnly(2026, 7, 15), TimeZoneInfo.Local);
+        var expectedEnd = AllDayDate.ToUtcInstant(new DateOnly(2026, 7, 16), TimeZoneInfo.Local);
+        Assert.Equal(expectedStart, evt.StartUtc);
+        Assert.Equal(expectedEnd, evt.EndUtc);
+    }
+
+    [Fact]
+    public void AllDay_Serialize_Uses_Local_Date_Not_Utc_Date()
+    {
+        // +08 local midnight 7/15 = 7/14 16:00Z. Emitting utc.Date would corrupt to 20260714.
+        var start = AllDayDate.ToUtcInstant(new DateOnly(2026, 7, 15), TimeZoneInfo.Local);
+        var end = AllDayDate.ToUtcInstant(new DateOnly(2026, 7, 16), TimeZoneInfo.Local);
+        var evt = new CalendarEvent
+        {
+            Uid = "allday-local-date",
+            Summary = "Local DATE",
+            IsAllDay = true,
+            StartUtc = start,
+            EndUtc = end,
+        };
+
+        var ics = IcalMapper.Serialize(evt);
+
+        Assert.Contains("DTSTART;VALUE=DATE:20260715", ics);
+        Assert.Contains("DTEND;VALUE=DATE:20260716", ics);
+        Assert.DoesNotContain("DTSTART;VALUE=DATE:20260714", ics);
+    }
+
+    [Fact]
+    public void AllDay_RoundTrip_Serialize_Parse_Preserves_Local_Date()
+    {
+        var startDate = new DateOnly(2026, 7, 15);
+        var endExclusive = startDate.AddDays(1);
+        var evt = new CalendarEvent
+        {
+            Uid = "allday-rt",
+            Summary = "Round trip",
+            IsAllDay = true,
+            StartUtc = AllDayDate.ToUtcInstant(startDate, TimeZoneInfo.Local),
+            EndUtc = AllDayDate.ToUtcInstant(endExclusive, TimeZoneInfo.Local),
+        };
+
+        var ics = IcalMapper.Serialize(evt);
+        var parsed = Assert.Single(IcalMapper.ToCalendarEvents(ics, Guid.NewGuid(), null, null));
+
+        Assert.True(parsed.IsAllDay);
+        Assert.Equal(startDate, AllDayDate.ToLocalDate(parsed.StartUtc, TimeZoneInfo.Local));
+        Assert.Equal(endExclusive, AllDayDate.ToLocalDate(parsed.EndUtc, TimeZoneInfo.Local));
+        Assert.Equal(evt.StartUtc, parsed.StartUtc);
+        Assert.Equal(evt.EndUtc, parsed.EndUtc);
+    }
+
+    [Fact]
+    public void AllDay_Parse_Date_Maps_To_Local_Midnight_Instant()
+    {
+        var ics = VCalendarHead +
+                  "BEGIN:VEVENT\r\n" +
+                  "UID:allday-parse\r\n" +
+                  "DTSTART;VALUE=DATE:20260715\r\n" +
+                  "DTEND;VALUE=DATE:20260716\r\n" +
+                  "SUMMARY:All-day\r\n" +
+                  "END:VEVENT\r\n" +
+                  VCalendarTail;
+
+        var evt = Assert.Single(IcalMapper.ToCalendarEvents(ics, Guid.NewGuid(), null, null));
+        Assert.True(evt.IsAllDay);
+        Assert.Equal(
+            AllDayDate.ToUtcInstant(new DateOnly(2026, 7, 15), TimeZoneInfo.Local),
+            evt.StartUtc);
+        Assert.Equal(
+            AllDayDate.ToUtcInstant(new DateOnly(2026, 7, 16), TimeZoneInfo.Local),
+            evt.EndUtc);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Globalization;
+using CalDesk.Core;
 using CalDesk.Core.Models;
 using Ical.Net;
 using Ical.Net.CalendarComponents;
@@ -100,6 +101,14 @@ public static class IcalMapper
             return DateTimeOffset.UtcNow;
         }
 
+        // All-day VALUE=DATE: map civil YYYYMMDD to local-midnight UTC so the date displays
+        // as that same calendar day in TimeZoneInfo.Local (not floating UTC midnight).
+        if (!dt.HasTime)
+        {
+            var date = new DateOnly(dt.Year, dt.Month, dt.Day);
+            return AllDayDate.ToUtcInstant(date, TimeZoneInfo.Local);
+        }
+
         var utc = dt.AsUtc;
         return new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
     }
@@ -120,7 +129,13 @@ public static class IcalMapper
         }
 
         // 3) RFC 5545 defaults when neither DTEND nor DURATION is present:
-        //    all-day ⇒ +1 day, timed ⇒ zero-length event.
+        //    all-day ⇒ exclusive next local midnight (DST-correct via AllDayDate), timed ⇒ zero-length.
+        if (isAllDay && start is not null && !start.HasTime)
+        {
+            var next = new DateOnly(start.Year, start.Month, start.Day).AddDays(1);
+            return AllDayDate.ToUtcInstant(next, TimeZoneInfo.Local);
+        }
+
         return isAllDay ? startUtc.AddDays(1) : startUtc;
     }
 
@@ -247,11 +262,14 @@ public static class IcalMapper
 
     private static CalDateTime BuildDateTime(CalendarEvent evt, bool isStart)
     {
-        var utc = (isStart ? evt.StartUtc : evt.EndUtc).UtcDateTime;
+        var instant = isStart ? evt.StartUtc : evt.EndUtc;
+        var utc = instant.UtcDateTime;
 
         if (evt.IsAllDay)
         {
-            var d = utc.Date;
+            // DATE must come from the local civil day of the stored instant, not utc.Date
+            // (e.g. +08:00 midnight 7/15 = 7/14 16:00Z → utc.Date would emit 20260714).
+            var d = AllDayDate.ToLocalDate(instant, TimeZoneInfo.Local);
             return new CalDateTime(d.Year, d.Month, d.Day);
         }
 

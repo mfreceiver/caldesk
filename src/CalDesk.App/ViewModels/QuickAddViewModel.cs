@@ -1,5 +1,6 @@
 using CalDesk.App.Models;
 using CalDesk.App.Services;
+using CalDesk.Core;
 using CalDesk.Core.Models;
 using CalDesk.Core.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -23,15 +24,26 @@ public sealed partial class QuickAddViewModel : ObservableObject
     private readonly SyncRunner _sync;
     private CalendarEvent? _editing;
 
+    /// <summary>Once the user edits end date/time, stop auto-deriving end from start.</summary>
+    private bool _endUserEdited;
+
+    /// <summary>Suppress treating programmatic end updates as user edits.</summary>
+    private bool _suppressEndUserTracking;
+
+    /// <summary>True while InitializeFor* assigns fields (skip auto-end / normalize noise).</summary>
+    private bool _isInitializing;
+
     public event Action? RequestClose;
 
     public List<CalendarInfo> Calendars { get; }
     public RecurrencePick[] RepeatOptions { get; } = Enum.GetValues<RecurrencePick>();
 
     [ObservableProperty] private string _title = string.Empty;
-    [ObservableProperty] private DateTime _date = DateTime.Today;
-    [ObservableProperty] private string _startText = "09:00";
-    [ObservableProperty] private string _endText = "10:00";
+
+    [ObservableProperty] private DateTime _startDate = DateTime.Today;
+    [ObservableProperty] private string _startTime = "09:00";
+    [ObservableProperty] private DateTime _endDate = DateTime.Today;
+    [ObservableProperty] private string _endTime = "10:00";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTime))]
@@ -47,6 +59,18 @@ public sealed partial class QuickAddViewModel : ObservableObject
 
     [ObservableProperty] private bool _isEditing;
 
+    /// <summary>User-visible validation message; null when ok.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasError))]
+    private string? _error;
+
+    public bool HasError => !string.IsNullOrEmpty(Error);
+
+    [ObservableProperty] private bool _calendarInvalid;
+    [ObservableProperty] private bool _startTimeInvalid;
+    [ObservableProperty] private bool _endTimeInvalid;
+    [ObservableProperty] private bool _rangeInvalid;
+
     public QuickAddViewModel(EventService events, SettingsService settingsService, AppSettings settings, SyncRunner sync, List<CalendarInfo> calendars)
     {
         _events = events;
@@ -60,43 +84,186 @@ public sealed partial class QuickAddViewModel : ObservableObject
     {
         _editing = null;
         IsEditing = false;
-        Date = dateHint.ToDateTime(TimeOnly.MinValue);
-        var now = DateTime.Now;
-        var hour = now.Minute >= 30 ? now.Hour + 1 : now.Hour;
-        var minute = now.Minute >= 30 ? 0 : 30;
-        if (hour >= 24)
+        _endUserEdited = false;
+        _isInitializing = true;
+        ClearValidation();
+
+        try
         {
-            hour = 23;
-            minute = 0;
+            StartDate = dateHint.ToDateTime(TimeOnly.MinValue);
+            var now = DateTime.Now;
+            var hour = now.Minute >= 30 ? now.Hour + 1 : now.Hour;
+            var minute = now.Minute >= 30 ? 0 : 30;
+            if (hour >= 24)
+            {
+                hour = 23;
+                minute = 0;
+            }
+
+            StartTime = $"{hour:D2}:{minute:D2}";
+            ReminderMinutes = _settings.DefaultReminderMinutes;
+            SelectedCalendar = defaultCalendar ?? Calendars.FirstOrDefault();
+            IsAllDay = false;
+            Location = string.Empty;
+            Title = string.Empty;
+            Repeat = RecurrencePick.None;
+            HasAdvanced = false;
+        }
+        finally
+        {
+            _isInitializing = false;
         }
 
-        StartText = $"{hour:D2}:{minute:D2}";
-        var endMin = minute + Math.Max(15, _settings.DefaultDurationMinutes);
-        EndText = $"{(hour + endMin / 60) % 24:D2}:{endMin % 60:D2}";
-        ReminderMinutes = _settings.DefaultReminderMinutes;
-        SelectedCalendar = defaultCalendar ?? Calendars.FirstOrDefault();
+        ApplyDefaultEndFromStart();
     }
 
     public void InitializeForEdit(CalendarEvent evt)
     {
         _editing = evt;
         IsEditing = true;
-        var tz = TimeZoneInfo.Local;
-        var startLocal = TimeZoneInfo.ConvertTime(evt.StartUtc, tz);
-        var endLocal = TimeZoneInfo.ConvertTime(evt.EndUtc, tz);
-        Title = evt.Summary;
-        Date = startLocal.Date;
-        IsAllDay = evt.IsAllDay;
-        StartText = startLocal.ToString("HH:mm");
-        EndText = endLocal.ToString("HH:mm");
-        Location = evt.Location ?? string.Empty;
-        ReminderMinutes = ReminderService.ParseTriggerMinutes(evt) ?? _settings.DefaultReminderMinutes;
-        var rule = evt.RecurrenceRule;
-        Repeat = rule == "FREQ=DAILY;INTERVAL=1" ? RecurrencePick.Daily
-               : rule == "FREQ=WEEKLY;INTERVAL=1;BYDAY=" + DayOfWeekCode(startLocal.DayOfWeek) ? RecurrencePick.Weekly
-               : rule == "FREQ=MONTHLY;INTERVAL=1" ? RecurrencePick.Monthly
-               : RecurrencePick.None;
-        SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == evt.CalendarId);
+        _endUserEdited = true; // never clobber an existing event's end via start auto-inference
+        _isInitializing = true;
+        ClearValidation();
+
+        try
+        {
+            var tz = TimeZoneInfo.Local;
+            var startLocal = TimeZoneInfo.ConvertTime(evt.StartUtc, tz);
+            var endLocal = TimeZoneInfo.ConvertTime(evt.EndUtc, tz);
+            Title = evt.Summary;
+            IsAllDay = evt.IsAllDay;
+
+            StartDate = startLocal.Date;
+            StartTime = startLocal.ToString("HH:mm");
+
+            if (evt.IsAllDay)
+            {
+                // All-day DTEND is exclusive midnight → inclusive EndDate is the previous local day.
+                var inclusiveEnd = endLocal.Date.AddDays(-1);
+                EndDate = inclusiveEnd < StartDate ? StartDate : inclusiveEnd;
+                EndTime = "00:00";
+            }
+            else
+            {
+                EndDate = endLocal.Date;
+                EndTime = endLocal.ToString("HH:mm");
+            }
+
+            Location = evt.Location ?? string.Empty;
+            ReminderMinutes = ReminderService.ParseTriggerMinutes(evt) ?? _settings.DefaultReminderMinutes;
+            var rule = evt.RecurrenceRule;
+            Repeat = rule == "FREQ=DAILY;INTERVAL=1" ? RecurrencePick.Daily
+                   : rule == "FREQ=WEEKLY;INTERVAL=1;BYDAY=" + DayOfWeekCode(startLocal.DayOfWeek) ? RecurrencePick.Weekly
+                   : rule == "FREQ=MONTHLY;INTERVAL=1" ? RecurrencePick.Monthly
+                   : RecurrencePick.None;
+            SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == evt.CalendarId);
+            // Expand advanced when editing a recurring event so repeat is visible.
+            HasAdvanced = Repeat != RecurrencePick.None;
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
+    }
+
+    partial void OnStartDateChanged(DateTime value)
+    {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        ClearValidation();
+        if (!_endUserEdited)
+        {
+            ApplyDefaultEndFromStart();
+        }
+    }
+
+    partial void OnStartTimeChanged(string value)
+    {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        ClearValidation();
+        // Do not normalize here: bindings use PropertyChanged so mid-keystroke rewrite would steal input.
+        if (!_endUserEdited)
+        {
+            ApplyDefaultEndFromStart();
+        }
+    }
+
+    partial void OnEndDateChanged(DateTime value)
+    {
+        if (_isInitializing || _suppressEndUserTracking)
+        {
+            return;
+        }
+
+        ClearValidation();
+        _endUserEdited = true;
+    }
+
+    partial void OnEndTimeChanged(string value)
+    {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        ClearValidation();
+        if (!_suppressEndUserTracking)
+        {
+            _endUserEdited = true;
+        }
+    }
+
+    partial void OnIsAllDayChanged(bool value)
+    {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        ClearValidation();
+        if (value)
+        {
+            // Spec: toggling all-day on defaults to a single inclusive day.
+            _suppressEndUserTracking = true;
+            EndDate = StartDate.Date;
+            _suppressEndUserTracking = false;
+            // Not a user "end edit" for timed auto-follow after they turn all-day off again.
+            _endUserEdited = false;
+        }
+    }
+
+    partial void OnSelectedCalendarChanged(CalendarInfo? value)
+    {
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        ClearValidation();
+    }
+
+    private void ApplyDefaultEndFromStart()
+    {
+        if (!TimeText.TryParse(StartTime, out var startTod))
+        {
+            return;
+        }
+
+        var duration = Math.Max(15, _settings.DefaultDurationMinutes);
+        var startLocal = StartDate.Date.Add(startTod.ToTimeSpan());
+        var endLocal = startLocal.AddMinutes(duration);
+
+        _suppressEndUserTracking = true;
+        EndDate = endLocal.Date;
+        EndTime = TimeText.Format(TimeOnly.FromDateTime(endLocal));
+        _suppressEndUserTracking = false;
     }
 
     [RelayCommand]
@@ -105,34 +272,64 @@ public sealed partial class QuickAddViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
+        ClearValidation();
+
         if (SelectedCalendar is null)
         {
+            SetValidation(
+                "请选择日历",
+                calendarInvalid: true);
             return;
         }
 
         var tz = TimeZoneInfo.Local;
-        var dateOnly = DateOnly.FromDateTime(Date);
-        DateTimeOffset startUtc, endUtc;
+        var startDateOnly = DateOnly.FromDateTime(StartDate);
+        var endDateOnly = DateOnly.FromDateTime(EndDate);
 
-        if (IsAllDay)
+        // Normalize display when times parse (before range rules that may adjust EndDate).
+        if (!IsAllDay)
         {
-            startUtc = LocalMidnightToUtc(dateOnly, tz);
-            endUtc = startUtc.AddDays(1);
-        }
-        else
-        {
-            if (!TimeOnly.TryParse(StartText, out var s) || !TimeOnly.TryParse(EndText, out var e))
+            if (TimeText.TryParse(StartTime, out var sNorm))
             {
-                return;
+                StartTime = TimeText.Format(sNorm);
             }
 
-            var sLocal = dateOnly.ToDateTime(s, DateTimeKind.Unspecified);
-            // End clock at/before start → overnight event (ends the following day).
-            var endDateOnly = e <= s ? dateOnly.AddDays(1) : dateOnly;
-            var eLocal = endDateOnly.ToDateTime(e, DateTimeKind.Unspecified);
-            startUtc = new DateTimeOffset(sLocal, tz.GetUtcOffset(sLocal)).UtcDateTime;
-            endUtc = new DateTimeOffset(eLocal, tz.GetUtcOffset(eLocal)).UtcDateTime;
+            if (TimeText.TryParse(EndTime, out var eNorm))
+            {
+                _suppressEndUserTracking = true;
+                EndTime = TimeText.Format(eNorm);
+                _suppressEndUserTracking = false;
+            }
         }
+
+        var range = EventTimeRange.TryCompute(
+            IsAllDay,
+            startDateOnly,
+            endDateOnly,
+            IsAllDay ? null : StartTime,
+            IsAllDay ? null : EndTime,
+            tz);
+
+        if (range.Status != EventTimeRangeStatus.Ok)
+        {
+            SetValidation(
+                range.Message ?? "时间范围无效",
+                startTimeInvalid: range.StartTimeInvalid,
+                endTimeInvalid: range.EndTimeInvalid,
+                rangeInvalid: range.RangeInvalid || range.Status == EventTimeRangeStatus.RangeInvalid);
+            return;
+        }
+
+        // Overnight same-day push: surface the EndDate that was actually saved.
+        if (range.AdjustedEndDate is { } adjustedEnd)
+        {
+            _suppressEndUserTracking = true;
+            EndDate = adjustedEnd.ToDateTime(TimeOnly.MinValue);
+            _suppressEndUserTracking = false;
+        }
+
+        var startUtc = range.StartUtc;
+        var endUtc = range.EndUtc;
 
         var evt = _editing ?? new CalendarEvent();
         evt.CalendarId = SelectedCalendar.Id;
@@ -146,7 +343,7 @@ public sealed partial class QuickAddViewModel : ObservableObject
         evt.RecurrenceRule = Repeat switch
         {
             RecurrencePick.Daily => "FREQ=DAILY;INTERVAL=1",
-            RecurrencePick.Weekly => $"FREQ=WEEKLY;INTERVAL=1;BYDAY={DayOfWeekCode(dateOnly.DayOfWeek)}",
+            RecurrencePick.Weekly => $"FREQ=WEEKLY;INTERVAL=1;BYDAY={DayOfWeekCode(startDateOnly.DayOfWeek)}",
             RecurrencePick.Monthly => "FREQ=MONTHLY;INTERVAL=1",
             _ => null,
         };
@@ -187,6 +384,29 @@ public sealed partial class QuickAddViewModel : ObservableObject
         }
     }
 
+    private void ClearValidation()
+    {
+        Error = null;
+        CalendarInvalid = false;
+        StartTimeInvalid = false;
+        EndTimeInvalid = false;
+        RangeInvalid = false;
+    }
+
+    private void SetValidation(
+        string message,
+        bool calendarInvalid = false,
+        bool startTimeInvalid = false,
+        bool endTimeInvalid = false,
+        bool rangeInvalid = false)
+    {
+        Error = message;
+        CalendarInvalid = calendarInvalid;
+        StartTimeInvalid = startTimeInvalid;
+        EndTimeInvalid = endTimeInvalid;
+        RangeInvalid = rangeInvalid;
+    }
+
     private static string DayOfWeekCode(DayOfWeek d) => d switch
     {
         DayOfWeek.Sunday => "SU",
@@ -198,10 +418,4 @@ public sealed partial class QuickAddViewModel : ObservableObject
         DayOfWeek.Saturday => "SA",
         _ => "MO",
     };
-
-    private static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
-    {
-        var local = date.ToDateTime(new TimeOnly(0, 0), DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, tz.GetUtcOffset(local)).UtcDateTime;
-    }
 }
