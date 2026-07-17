@@ -110,12 +110,17 @@ public sealed partial class MonthViewModel : ObservableObject
         if (v != Volatile.Read(ref _navVersion))
             return;
         Month = built;
-        // Always refresh the selected day after committing Month so the bottom panel never
-        // shows stale events (sync / hide-calendar / edit reloads in the same month).
-        // When navigating to a different month, SelectedDate no longer matches and we fall
-        // back to today.
+        // Refresh the selected day inline, gated by nav version so a rapid Prev/Next cannot
+        // leave a stale bottom panel from an older month (the user-click SelectDay command
+        // path stays unconditional). Fall back to today when SelectedDate is in another month.
         var sel = SelectedDate is { } d && d.Year == year && d.Month == monthNumber ? d : today;
-        await SelectDay(sel);
+        var selRangeStart = LocalMidnightToUtc(sel, tz);
+        var selRangeEnd = LocalMidnightToUtc(sel.AddDays(1), tz);
+        var selStored = await _store.Events.GetInRangeAsync(selectedIds, selRangeStart, selRangeEnd);
+        if (v != Volatile.Read(ref _navVersion))
+            return;
+        SelectedDate = sel;
+        SelectedDay = _viewService.BuildDay(selStored, calMap, sel, tz, today, DateTimeOffset.UtcNow);
     }
 
     /// <summary>Selects a single day and builds its detail (all-day + timed) for the bottom panel.

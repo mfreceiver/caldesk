@@ -189,12 +189,12 @@
                                                                 <Setter Property="Foreground" Value="#1F2937" />
                                                                 <Setter Property="FontWeight" Value="Normal" />
                                                                 <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsWeekend}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#B91C1C" />
+                                                                    </DataTrigger>
                                                                     <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                                         <Setter Property="Foreground" Value="#FFFFFF" />
                                                                         <Setter Property="FontWeight" Value="Bold" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding IsWeekend}" Value="True">
-                                                                        <Setter Property="Foreground" Value="#B91C1C" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
