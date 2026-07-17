@@ -174,7 +174,8 @@ public sealed class CalendarViewServiceTests
 
         var d20 = CellAt(view, 7, 20);
         Assert.Equal(5, d20.OccurrenceCount);              // 1 all-day + 4 timed
-        Assert.Equal(3, d20.Preview.Count);                // capped at default PreviewLimit
+        Assert.Equal(2, d20.Preview.Count);                // >3 ⇒ 2 visible (count-based overflow rule)
+        Assert.Equal(3, d20.OverflowCount);                // 5 - 2
         Assert.True(d20.Preview[0].IsAllDay);              // all-day surfaced first
         Assert.Equal("AllDay", d20.Preview[0].Summary);
         Assert.Equal("全天", d20.Preview[0].TimeLabel);
@@ -224,5 +225,62 @@ public sealed class CalendarViewServiceTests
 
         Assert.Single(view.Days[2].Timed); // Wed
         Assert.Single(view.Days[3].Timed); // Thu
+    }
+
+    // ---- Overflow rule + BuildDay (W4 Task 1) ----
+
+    [Fact]
+    public void BuildMonth_MoreThanThree_ShowsTwoAndOverflowCount()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        // 4 timed events on Tuesday Jul 14 (Monday.AddDays(1)); each 1h starting at 10+i.
+        var events = Enumerable.Range(0, 4)
+            .Select(i => Ev(14, 10 + i, 0, 11 + i, 0, summary: "E" + i, calId: calId)).ToArray();
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildMonth(events, calendars, 2026, 7, Tz, Today, Now);
+        var cell = view.Weeks.SelectMany(w => w.Days).First(d => d.OccurrenceCount == 4);
+        Assert.Equal(2, cell.Preview.Count);
+        Assert.Equal(2, cell.OverflowCount); // 4 - 2
+    }
+
+    [Fact]
+    public void BuildMonth_ThreeOrFewer_NoOverflow()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        var events = new[]
+        {
+            Ev(Monday.Day, 9, 0, 10, 0, summary: "A", calId: calId),
+            Ev(Monday.Day, 10, 0, 11, 0, summary: "B", calId: calId),
+            Ev(Monday.Day, 11, 0, 12, 0, summary: "C", calId: calId),
+        };
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildMonth(events, calendars, 2026, 7, Tz, Today, Now);
+        var cell = view.Weeks.SelectMany(w => w.Days).First(d => d.Date == Monday);
+        Assert.Equal(0, cell.OverflowCount);
+        Assert.Equal(3, cell.Preview.Count);
+    }
+
+    [Fact]
+    public void BuildDay_ReturnsSingleDayGrouped()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        var events = new[]
+        {
+            Ev(Today.Day, 9, 0, 10, 0, summary: "Timed", calId: calId),
+            Ev(Today.Day, 0, 0, 0, 0, allDay: true, summary: "AllDay", calId: calId),
+        };
+        events[1].EndUtc = new DateTimeOffset(2026, Today.Month, Today.Day + 1, 0, 0, 0, TimeSpan.Zero);
+
+        var svc = new CalendarViewService(new StubExpander());
+        var day = svc.BuildDay(events, calendars, Today, Tz, Today, Now);
+        Assert.Equal(Today, day.Date);
+        Assert.Single(day.AllDay);
+        Assert.Single(day.Timed);
+        // header weekday prefix is one of Mon..Sun (e.g. "周三 15")
+        Assert.Contains(CalendarViewService.Headers, h => day.Header.StartsWith(h));
+        Assert.True(day.IsToday); // date == today
     }
 }

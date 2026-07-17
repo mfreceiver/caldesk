@@ -91,8 +91,10 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                     .ThenBy(x => x.StartUtc)
                     .ToList();
 
+                var count = ordered.Count;
+                var visible = count > 3 ? 2 : 3;
                 var preview = ordered
-                    .Take(options.PreviewLimit)
+                    .Take(visible)
                     .Select(x => new MonthOccurrence
                     {
                         EventId = x.EventId,
@@ -111,6 +113,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                     IsToday = date == today,
                     IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                     OccurrenceCount = ordered.Count,
+                    OverflowCount = count > 3 ? count - 2 : 0,
                     Preview = preview,
                 });
             }
@@ -125,6 +128,30 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             Title = $"{year}年{month}月",
             WeekdayHeaders = WeekdayNames,
             Weeks = weeks,
+        };
+    }
+
+    /// <summary>Build a single-day detail (all-day + timed) for the month-view bottom panel.</summary>
+    public WeekDay BuildDay(
+        IEnumerable<CalendarEvent> events,
+        IReadOnlyDictionary<Guid, CalendarInfo> calendars,
+        DateOnly date,
+        TimeZoneInfo displayTz,
+        DateOnly today,
+        DateTimeOffset nowUtc)
+    {
+        var byDay = BucketByDay(events, calendars, date, date.AddDays(1), displayTz, nowUtc, hideFullyPastBefore: null);
+        var bucket = byDay[date];
+        var all = bucket.Where(x => x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
+        var timed = bucket.Where(x => !x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
+        var idx = ((int)date.DayOfWeek + 6) % 7;
+        return new WeekDay
+        {
+            Date = date,
+            Header = $"{WeekdayNames[idx]} {date.Day}",
+            IsToday = date == today,
+            AllDay = all,
+            Timed = timed,
         };
     }
 
