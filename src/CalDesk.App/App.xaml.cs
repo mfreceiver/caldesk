@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using CalDesk.App.Diagnostics;
 using CalDesk.App.Models;
 using CalDesk.App.Services;
 using CalDesk.App.ViewModels;
@@ -38,21 +39,32 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var logPath = StartupLog.Init();
+        RegisterGlobalHandlers();
+        StartupLog.Log($"OnStartup: begin  log={logPath}");
+
         try
         {
             Directory.CreateDirectory(AppDataDir);
+            StartupLog.Log("OnStartup: AppDataDir ready");
 
+        StartupLog.Log("OnStartup: constructing CalDeskDatabase");
         var db = new CalDeskDatabase(Path.Combine(AppDataDir, "caldesk.db"));
+        StartupLog.Log("OnStartup: db.InitializeAsync (await)");
         await db.InitializeAsync();
+        StartupLog.Log("OnStartup: DB initialized");
         _store = new StorageServices(db);
 
         _settingsSvc = new SettingsService();
         _settingsSvc.Load();
+        StartupLog.Log($"OnStartup: settings loaded  mode={_settingsSvc.Current.WindowMode}  acceptInsecureTls={_settingsSvc.Current.AcceptInsecureTls}  acctCfgStartWithWindows={_settingsSvc.Current.StartWithWindows}");
 
         _creds = new WindowsCredentialStore();
+        StartupLog.Log("OnStartup: WindowsCredentialStore created");
         _factory = new CalDavClientFactory(_creds, () => _settingsSvc.Current.AcceptInsecureTls);
         _viewSvc = new CalendarViewService(new IcalRecurrenceExpander());
         _events = new EventService(_store.Events, _store.SyncOperations);
+        StartupLog.Log("OnStartup: core services built");
 
         _sync = new SyncRunner(_store, _factory, _settingsSvc.Current);
         _sync.SyncCompleted += (_, _) => _week?.Dispatcher.InvokeAsync(() =>
@@ -64,18 +76,24 @@ public partial class App : Application
             }
         });
         _sync.Start();
+        StartupLog.Log("OnStartup: SyncRunner started (first sync ~T+3s)");
 
         _reminders = new ReminderService(_store, new IcalRecurrenceExpander(), () => _settingsSvc.Current, OnReminder);
+        StartupLog.Log("OnStartup: ReminderService created");
 
         _vm = new WeekViewModel(_store, _viewSvc, _events, _sync,
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
             onEdit: id => _ = OpenQuickAddAsync(null, id));
+        StartupLog.Log("OnStartup: WeekViewModel created");
 
         _week = new WeekWindow(_vm);
         ApplyWindowSettings(_week, _settingsSvc.Current);
+        StartupLog.Log("OnStartup: WeekWindow constructed");
         _week.Show();
+        StartupLog.Log("OnStartup: WeekWindow.Show done");
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
+        StartupLog.Log("OnStartup: gadget styles + window mode applied");
 
         _monthVm = new MonthViewModel(_store, _viewSvc, _sync,
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
@@ -83,22 +101,57 @@ public partial class App : Application
         _month = new MonthWindow(_monthVm);
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
+        StartupLog.Log("OnStartup: MonthWindow constructed");
 
             _tray = FindResource("TrayIcon");
             if (_tray is TaskbarIcon tray)
             {
                 // Icon lives only in Application.Resources, so it never gets a Loaded event —
                 // force it into existence. Efficiency mode off so our timers aren't throttled.
+                StartupLog.Log("OnStartup: tray.ForceCreate (native)");
                 tray.ForceCreate(enablesEfficiencyMode: false);
+                StartupLog.Log("OnStartup: tray created");
+            }
+            else
+            {
+                StartupLog.Log("OnStartup: TrayIcon resource NOT found");
             }
 
+            StartupLog.Log("OnStartup: WeekViewModel.NavigateTo");
             _vm.NavigateTo(WeekViewModel.MondayOf(DateTime.Today));
+            StartupLog.Log("OnStartup: COMPLETE — window should be live");
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.ToString(), "CalDesk 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            StartupLog.Log(ex, "OnStartup: FAILED");
+            MessageBox.Show(
+                ex.ToString() + "\n\n日志已写入：" + (StartupLog.Path ?? "(none)"),
+                "CalDesk 启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
             Shutdown(-1);
         }
+    }
+
+    /// <summary>Catch exceptions that escape <see cref="OnStartup"/> — background threads,
+    /// fire-and-forget tasks, and the WPF dispatcher — so a silent exit leaves a trail.</summary>
+    private void RegisterGlobalHandlers()
+    {
+        DispatcherUnhandledException += (_, args) =>
+        {
+            StartupLog.Log(args.Exception, $"DispatcherUnhandledException (handled={args.Handled})");
+            // Leave Handled=false so the real crash still surfaces for diagnosis.
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            var ex = args.ExceptionObject as Exception
+                     ?? new InvalidOperationException("UnhandledExceptionObject: " + args.ExceptionObject);
+            StartupLog.Log(ex, $"AppDomain.UnhandledException (terminating={args.IsTerminating})");
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+            StartupLog.Log(args.Exception, "TaskScheduler.UnobservedTaskException");
     }
 
     private static void ApplyWindowSettings(WeekWindow w, AppSettings s)

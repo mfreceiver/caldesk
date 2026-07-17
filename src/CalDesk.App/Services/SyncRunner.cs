@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Threading;
+using CalDesk.App.Diagnostics;
 using CalDesk.App.Models;
 using CalDesk.CalDav;
 using CalDesk.CalDav.Synchronization;
@@ -70,27 +71,34 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
 
     public async Task RunAsync()
     {
+        StartupLog.Log("SyncRunner.RunAsync: enter");
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
         {
+            StartupLog.Log("SyncRunner.RunAsync: already running, skip");
             return;
         }
 
         try
         {
             var accounts = await _store.Accounts.GetAllAsync();
+            StartupLog.Log($"SyncRunner.RunAsync: {accounts.Count} account(s)");
             if (accounts.Count == 0)
             {
                 SetStatus("未配置账户");
+                StartupLog.Log("SyncRunner.RunAsync: no accounts, idle");
                 return;
             }
 
             SetStatus("同步中…");
             var account = accounts[0];
 
+            StartupLog.Log("SyncRunner.RunAsync: creating CalDAV client");
             await using var client = await _factory.CreateAsync(account);
+            StartupLog.Log("SyncRunner.RunAsync: client created, syncing");
 
             var engine = new SyncEngine(_store.Events, _store.Calendars, _store.SyncState, _store.SyncOperations, client);
             LastReport = await engine.SyncAsync();
+            StartupLog.Log($"SyncRunner.RunAsync: done  pulled={LastReport.Pulled} pushed={LastReport.Pushed} errors={LastReport.Errors.Count}");
 
             SetStatus(LastReport.HasConflicts
                 ? $"有 {LastReport.ConflictEventIds.Count} 个冲突待处理"
@@ -102,6 +110,7 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
+            StartupLog.Log(ex, "SyncRunner.RunAsync: failed");
             SetStatus("同步失败：" + ex.Message);
         }
         finally
