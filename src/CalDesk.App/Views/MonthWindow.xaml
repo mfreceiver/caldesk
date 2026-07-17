@@ -34,6 +34,39 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Segmented 周/月 toggle: 月 active in month window; 周 click returns to week. -->
+        <Style x:Key="ToggleSegment" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#14000000" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ToggleSegmentActive" TargetType="Button" BasedOn="{StaticResource ToggleSegment}">
+            <Setter Property="Background" Value="#FFFFFFFF" />
+            <Setter Property="Foreground" Value="#1F2937" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
     </Window.Resources>
 
     <Border Background="#F4FFFFFF" CornerRadius="10" Padding="12" MouseLeftButtonDown="OnDrag">
@@ -48,22 +81,37 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- header -->
+            <!-- header: ＋ | ‹  MonthHeader  › | 周/月 toggle -->
             <Grid Grid.Row="0" Margin="0,0,0,6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal">
-                    <Button Content="‹" Style="{StaticResource GhostButton}" Command="{Binding PrevMonthCommand}" Margin="0,0,2,0" />
-                    <Button Content="›" Style="{StaticResource GhostButton}" Command="{Binding NextMonthCommand}" />
-                    <Button Content="＋" FontSize="15" Style="{StaticResource GhostButton}"
-                            Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项" Margin="6,0,0,0" />
+
+                <Button Grid.Column="0" Content="＋" FontSize="17" Style="{StaticResource GhostButton}"
+                        Command="{Binding AddNewCommand}" CommandParameter="{x:Null}" ToolTip="新增事项"
+                        VerticalAlignment="Center" />
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button Content="‹" Style="{StaticResource GhostButton}"
+                            Command="{Binding PrevMonthCommand}" Margin="0,0,2,0" />
+                    <TextBlock Text="{Binding MonthHeader}" FontSize="15" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="4,0" />
+                    <Button Content="›" Style="{StaticResource GhostButton}"
+                            Command="{Binding NextMonthCommand}" Margin="2,0,0,0" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{Binding MonthHeader}" FontSize="15" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <Button Grid.Column="2" Content="周" Style="{StaticResource GhostButton}" ToolTip="切回周视图" Click="OnBackToWeek" />
+
+                <Border Grid.Column="2" Background="#14000000" CornerRadius="7" Padding="2"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="周" Style="{StaticResource ToggleSegment}"
+                                ToolTip="周视图" Click="OnBackToWeek" />
+                        <Button Content="月" Style="{StaticResource ToggleSegmentActive}"
+                                IsEnabled="False" ToolTip="月视图" />
+                    </StackPanel>
+                </Border>
             </Grid>
 
             <!-- weekday header row -->

@@ -1,3 +1,4 @@
+using System.Threading;
 using CalDesk.App.Services;
 using CalDesk.Core.Models;
 using CalDesk.Core.Services;
@@ -16,6 +17,12 @@ public sealed partial class MonthViewModel : ObservableObject
     private readonly SyncRunner _sync;
     private readonly Action<DateOnly?> _onAddNew;
     private readonly Action<Guid> _onEdit;
+
+    /// <summary>
+    /// Bumped on each <see cref="NavigateTo"/> so an in-flight <see cref="LoadAsync"/> from an older
+    /// navigation cannot overwrite <see cref="Month"/> after a newer month was selected.
+    /// </summary>
+    private int _navVersion;
 
     [ObservableProperty]
     private string _monthHeader = string.Empty;
@@ -51,14 +58,18 @@ public sealed partial class MonthViewModel : ObservableObject
 
     public void NavigateTo(DateOnly anchor)
     {
+        var v = Interlocked.Increment(ref _navVersion);
         var first = new DateOnly(anchor.Year, anchor.Month, 1);
         Year = first.Year;
         MonthNumber = first.Month;
         MonthHeader = $"{first.Year}年{first.Month}月";
-        _ = LoadAsync();
+        _ = LoadAsync(v);
     }
 
-    public async Task LoadAsync()
+    /// <summary>Reload for the current month (refresh). Abandons if navigation raced ahead.</summary>
+    public Task LoadAsync() => LoadAsync(Volatile.Read(ref _navVersion));
+
+    public async Task LoadAsync(int v)
     {
         if (MonthNumber < 1)
         {
@@ -66,8 +77,11 @@ public sealed partial class MonthViewModel : ObservableObject
         }
 
         var tz = TimeZoneInfo.Local;
-        var first = new DateOnly(Year, MonthNumber, 1);
-        var last = new DateOnly(Year, MonthNumber, DateTime.DaysInMonth(Year, MonthNumber));
+        // Capture nav targets before awaits so a concurrent NavigateTo cannot poison this load's build.
+        var year = Year;
+        var monthNumber = MonthNumber;
+        var first = new DateOnly(year, monthNumber, 1);
+        var last = new DateOnly(year, monthNumber, DateTime.DaysInMonth(year, monthNumber));
 
         // Fetch across the whole aligned grid so spillover days and recurring series are covered.
         var gridStart = first.AddDays(-DaysSinceMonday(first));
@@ -82,7 +96,11 @@ public sealed partial class MonthViewModel : ObservableObject
         var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
 
         var today = DateOnly.FromDateTime(DateTime.Today);
-        Month = _viewService.BuildMonth(stored, calMap, Year, MonthNumber, tz, today, DateTimeOffset.UtcNow);
+        var built = _viewService.BuildMonth(stored, calMap, year, monthNumber, tz, today, DateTimeOffset.UtcNow);
+        // Only the latest navigation may commit Month; header was already set synchronously in NavigateTo.
+        if (v != Volatile.Read(ref _navVersion))
+            return;
+        Month = built;
     }
 
     [RelayCommand]
