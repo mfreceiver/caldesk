@@ -166,7 +166,9 @@ public sealed partial class QuickAddViewModel : ObservableObject
             _settingsService.Save(_settings);
         }
 
-        await _sync.RunAsync();
+        // Status must reflect outbox immediately even if a sync is already running (RunAsync no-ops).
+        await _sync.RefreshPendingStatusAsync();
+        _ = _sync.RunAsync();
         RequestClose?.Invoke();
     }
 
@@ -179,7 +181,8 @@ public sealed partial class QuickAddViewModel : ObservableObject
         if (_editing is not null)
         {
             await _events.DeleteAsync(_editing.Id);
-            await _sync.RunAsync();
+            await _sync.RefreshPendingStatusAsync();
+            _ = _sync.RunAsync();
             RequestClose?.Invoke();
         }
     }

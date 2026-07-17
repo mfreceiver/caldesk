@@ -95,7 +95,9 @@ public sealed partial class WeekViewModel : ObservableObject
     private async Task DeleteAsync(Guid eventId)
     {
         await _events.DeleteAsync(eventId);
-        await _sync.RunAsync();
+        // Status must reflect outbox immediately even if a sync is already running (RunAsync no-ops).
+        await _sync.RefreshPendingStatusAsync();
+        _ = _sync.RunAsync();
         await LoadAsync();
     }
 
