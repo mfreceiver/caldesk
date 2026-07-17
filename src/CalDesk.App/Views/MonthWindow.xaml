@@ -6,8 +6,9 @@
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:MonthViewModel}"
         Title="CalDesk 月视图" Width="380" Height="520"
+        MinWidth="380" MinHeight="520"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ShowInTaskbar="False" ResizeMode="NoResize"
+        ShowInTaskbar="False" ResizeMode="CanResize"
         FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />

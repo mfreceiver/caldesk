@@ -195,6 +195,17 @@ public partial class App : Application
         {
             w.Top = s.WindowTop;
         }
+
+        // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
+        if (!double.IsNaN(s.WindowWidth))
+        {
+            w.Width = s.WindowWidth;
+        }
+
+        if (!double.IsNaN(s.WindowHeight))
+        {
+            w.Height = s.WindowHeight;
+        }
     }
 
     private static void ApplyWindowMode(Window w, AppSettings s)
@@ -218,6 +229,16 @@ public partial class App : Application
         w.IsPositionLocked = s.LockedPosition;
         w.Opacity = Math.Clamp(s.Opacity, 0.15, 1.0);
         // The month window has no persisted position of its own; it opens near the week window.
+        // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
+        if (!double.IsNaN(s.MonthWindowWidth))
+        {
+            w.Width = s.MonthWindowWidth;
+        }
+
+        if (!double.IsNaN(s.MonthWindowHeight))
+        {
+            w.Height = s.MonthWindowHeight;
+        }
     }
 
     private async Task OpenQuickAddAsync(DateOnly? date, Guid? editId)
@@ -380,6 +401,19 @@ public partial class App : Application
         {
             s.WindowLeft = w.Left;
             s.WindowTop = w.Top;
+        }
+
+        // Persist DIU window sizes (week + month). NaN stays NaN until the user resizes once.
+        if (_week is { } weekWin)
+        {
+            s.WindowWidth = weekWin.Width;
+            s.WindowHeight = weekWin.Height;
+        }
+
+        if (_month is { } monthWin)
+        {
+            s.MonthWindowWidth = monthWin.Width;
+            s.MonthWindowHeight = monthWin.Height;
         }
 
         _settingsSvc.Save(s);

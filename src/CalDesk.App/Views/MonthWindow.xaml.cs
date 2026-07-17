@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 using CalDesk.App.ViewModels;
+using CalDesk.App.Windowing;
 using CalDesk.Core.Models;
 
 namespace CalDesk.App.Views;
@@ -47,6 +48,14 @@ public partial class MonthWindow : Window
     }
 
     private void OnBackToWeek(object sender, RoutedEventArgs e) => BackRequested?.Invoke();
+
+    // Borderless-resize (WM_NCHITTEST) + DPI crispness flags are attached once the Win32 hwnd exists.
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        BorderlessResize.Attach(this);
+        DpiHandling.Attach(this);
+    }
 
     // Closing hides to the tray (app stays alive via tray icon), matching the week window.
     protected override void OnClosing(CancelEventArgs e)
