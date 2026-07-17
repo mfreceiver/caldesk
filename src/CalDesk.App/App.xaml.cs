@@ -104,6 +104,7 @@ public partial class App : Application
         _monthVm = new MonthViewModel(_store, _viewSvc, _sync,
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
             onEdit: id => _ = OpenQuickAddAsync(null, id));
+        _monthVm.SplitRatio = Math.Clamp(_settingsSvc.Current.MonthSplitRatio, 0.1, 0.9);
         _month = new MonthWindow(_monthVm);
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
@@ -414,6 +415,7 @@ public partial class App : Application
         {
             s.MonthWindowWidth = monthWin.Width;
             s.MonthWindowHeight = monthWin.Height;
+            s.MonthSplitRatio = _monthVm.SplitRatio;
         }
 
         _settingsSvc.Save(s);
