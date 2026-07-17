@@ -1,6 +1,9 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using CalDesk.App.ViewModels;
 using CalDesk.Core.Models;
 
@@ -27,10 +30,34 @@ public partial class WeekWindow : Window
             return;
         }
 
+        // Let ResizeGrip / interactive children handle their own input.
+        if (e.OriginalSource is DependencyObject src &&
+            (FindAncestor<ResizeGrip>(src) is not null ||
+             FindAncestor<Button>(src) is not null ||
+             FindAncestor<ScrollBar>(src) is not null))
+        {
+            return;
+        }
+
         if (e.ChangedButton == MouseButton.Left)
         {
             DragMove();
         }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private void OnDayDoubleAdd(object? sender, MouseButtonEventArgs e)
@@ -42,7 +69,7 @@ public partial class WeekWindow : Window
         }
     }
 
-    /// <summary>Raised when the user clicks the "月" button to open the month view.</summary>
+    /// <summary>Raised when the user clicks the "月" segment to open the month view.</summary>
     public event Action? MonthRequested;
 
     private void OnMonth(object sender, RoutedEventArgs e) => MonthRequested?.Invoke();

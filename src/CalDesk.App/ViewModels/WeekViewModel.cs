@@ -1,3 +1,4 @@
+using System.Threading;
 using CalDesk.App.Services;
 using CalDesk.Core.Models;
 using CalDesk.Core.Services;
@@ -15,6 +16,12 @@ public sealed partial class WeekViewModel : ObservableObject
     private readonly SyncRunner _sync;
     private readonly Action<DateOnly?> _onAddNew;
     private readonly Action<Guid> _onEdit;
+
+    /// <summary>
+    /// Bumped on each <see cref="NavigateTo"/> so an in-flight <see cref="LoadAsync"/> from an older
+    /// navigation cannot overwrite <see cref="Week"/> after a newer week was selected.
+    /// </summary>
+    private int _navVersion;
 
     [ObservableProperty]
     private string _weekHeader = string.Empty;
@@ -46,19 +53,23 @@ public sealed partial class WeekViewModel : ObservableObject
 
     public void NavigateTo(DateOnly monday)
     {
+        var v = Interlocked.Increment(ref _navVersion);
         WeekStart = monday;
         var end = monday.AddDays(6);
         WeekHeader = end.Month == monday.Month
             ? $"{monday.Month}月{monday.Day}日—{end.Day}日"
             : $"{monday.Month}月{monday.Day}日—{end.Month}月{end.Day}日";
-        _ = LoadAsync();
+        _ = LoadAsync(v);
     }
 
-    public async Task LoadAsync()
+    /// <summary>Reload for the current week (refresh/delete). Abandons if navigation raced ahead.</summary>
+    public Task LoadAsync() => LoadAsync(Volatile.Read(ref _navVersion));
+
+    public async Task LoadAsync(int v)
     {
         var tz = TimeZoneInfo.Local;
-        var rangeStart = LocalMidnightToUtc(WeekStart, tz);
-        var rangeEnd = rangeStart.AddDays(7);
+        // Local-midnight bounds (not rangeStart.AddDays(7)) so DST weeks are 167/169h, matching BuildWeek.
+        var (rangeStart, rangeEnd) = LocalDateTimeRange.WeekStorageRange(WeekStart, tz);
 
         var allCals = await _store.Calendars.GetAllAsync();
         var calMap = allCals.ToDictionary(c => c.Id);
@@ -66,7 +77,11 @@ public sealed partial class WeekViewModel : ObservableObject
         var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
 
         var today = DateOnly.FromDateTime(DateTime.Today);
-        Week = _viewService.BuildWeek(stored, calMap, WeekStart, tz, today, DateTimeOffset.UtcNow);
+        var built = _viewService.BuildWeek(stored, calMap, WeekStart, tz, today, DateTimeOffset.UtcNow);
+        // Only the latest navigation may commit Week; header was already set synchronously in NavigateTo.
+        if (v != Volatile.Read(ref _navVersion))
+            return;
+        Week = built;
     }
 
     [RelayCommand]
@@ -106,11 +121,5 @@ public sealed partial class WeekViewModel : ObservableObject
         var d = DateOnly.FromDateTime(date);
         var diff = (7 + (d.DayOfWeek - DayOfWeek.Monday)) % 7;
         return d.AddDays(-diff);
-    }
-
-    private static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
-    {
-        var local = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, tz.GetUtcOffset(local)).UtcDateTime;
     }
 }
