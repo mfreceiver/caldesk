@@ -5,7 +5,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:QuickAddViewModel}"
-        Title="新增 / 编辑事项" Width="360" SizeToContent="Height"
+        Title="新增 / 编辑事项" Width="380" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         FontFamily="Microsoft YaHei UI" FontSize="13">
     <Window.Resources>
@@ -22,54 +22,132 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- 标题 -->
         <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="标题" VerticalAlignment="Center" Opacity="0.7" />
             <TextBox Grid.Column="1" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
         </Grid>
 
+        <!-- 开始：日期始终可见；时间仅非全天 -->
         <Grid Grid.Row="1" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="日期" VerticalAlignment="Center" Opacity="0.7" />
-            <DatePicker Grid.Column="1" SelectedDate="{Binding Date}" />
-            <CheckBox Grid.Column="2" Content="全天" VerticalAlignment="Center" Margin="8,0,0,0" IsChecked="{Binding IsAllDay}" />
+            <TextBlock Text="开始时间" VerticalAlignment="Center" Opacity="0.7" />
+            <DatePicker Grid.Column="1"
+                        SelectedDate="{Binding StartDate}"
+                        SelectedDateFormat="Short"
+                        Language="zh-CN"
+                        Margin="0,0,8,0" />
+            <TextBox Grid.Column="2"
+                     Text="{Binding StartTime, UpdateSourceTrigger=PropertyChanged}"
+                     Width="64" Padding="4"
+                     ToolTip="时间：0930 或 09:30"
+                     Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
+                <TextBox.Style>
+                    <Style TargetType="TextBox">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding StartTimeInvalid}" Value="True">
+                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                <Setter Property="BorderThickness" Value="1.5" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBox.Style>
+            </TextBox>
         </Grid>
 
-        <Grid Grid.Row="2" Margin="0,0,0,8" Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
+        <!-- 结束：日期始终可见（全天可编辑 EndDate）；时间仅非全天 -->
+        <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="时间" VerticalAlignment="Center" Opacity="0.7" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <TextBox Text="{Binding StartText, UpdateSourceTrigger=PropertyChanged}" Width="64" Padding="4" />
-                <TextBlock Text=" — " VerticalAlignment="Center" />
-                <TextBox Text="{Binding EndText, UpdateSourceTrigger=PropertyChanged}" Width="64" Padding="4" />
-            </StackPanel>
+            <TextBlock Text="结束时间" VerticalAlignment="Center" Opacity="0.7" />
+            <DatePicker Grid.Column="1"
+                        SelectedDate="{Binding EndDate}"
+                        SelectedDateFormat="Short"
+                        Language="zh-CN"
+                        Margin="0,0,8,0">
+                <DatePicker.Style>
+                    <Style TargetType="DatePicker">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
+                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                <Setter Property="BorderThickness" Value="1.5" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DatePicker.Style>
+            </DatePicker>
+            <TextBox Grid.Column="2"
+                     Text="{Binding EndTime, UpdateSourceTrigger=PropertyChanged}"
+                     Width="64" Padding="4"
+                     ToolTip="时间：0930 或 09:30"
+                     Visibility="{Binding HasTime, Converter={StaticResource Bool2Vis}}">
+                <TextBox.Style>
+                    <Style TargetType="TextBox">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding EndTimeInvalid}" Value="True">
+                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                <Setter Property="BorderThickness" Value="1.5" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
+                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                <Setter Property="BorderThickness" Value="1.5" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBox.Style>
+            </TextBox>
         </Grid>
 
+        <!-- 地点（始终可见，在日历之上） -->
         <Grid Grid.Row="3" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="64" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="地点" VerticalAlignment="Center" Opacity="0.7" />
+            <TextBox Grid.Column="1" Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
+        </Grid>
+
+        <!-- 日历 -->
+        <Grid Grid.Row="4" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="日历" VerticalAlignment="Center" Opacity="0.7" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding Calendars}" SelectedItem="{Binding SelectedCalendar}"
-                      DisplayMemberPath="DisplayName" />
+                      DisplayMemberPath="DisplayName">
+                <ComboBox.Style>
+                    <Style TargetType="ComboBox">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CalendarInvalid}" Value="True">
+                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                <Setter Property="BorderThickness" Value="1.5" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ComboBox.Style>
+            </ComboBox>
         </Grid>
 
-        <Grid Grid.Row="4" Margin="0,0,0,8">
+        <!-- 提醒 -->
+        <Grid Grid.Row="5" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="提醒" VerticalAlignment="Center" Opacity="0.7" />
@@ -79,36 +157,40 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="5" Margin="0,0,0,8">
+        <!-- 重复（更多选项内） -->
+        <Grid Grid.Row="6" Margin="0,0,0,8" Visibility="{Binding HasAdvanced, Converter={StaticResource Bool2Vis}}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
+                <ColumnDefinition Width="64" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="重复" VerticalAlignment="Center" Opacity="0.7" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding RepeatOptions}" SelectedItem="{Binding Repeat}" />
         </Grid>
 
-        <Grid Grid.Row="6" Margin="0,0,0,8" Visibility="{Binding HasAdvanced, Converter={StaticResource Bool2Vis}}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="56" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="地点" VerticalAlignment="Center" Opacity="0.7" />
-            <TextBox Grid.Column="1" Text="{Binding Location, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
-        </Grid>
-
         <Button Grid.Row="7" Content="[ 更多选项 ]" Command="{Binding MoreCommand}" HorizontalAlignment="Left"
-                Background="Transparent" BorderThickness="0" Foreground="#3B82F6" Cursor="Hand" Margin="56,0,0,8" />
+                Background="Transparent" BorderThickness="0" Foreground="#3B82F6" Cursor="Hand" Margin="64,0,0,8" />
 
-        <Grid Grid.Row="8">
+        <!-- 校验错误（非空时显示） -->
+        <TextBlock Grid.Row="8"
+                   Text="{Binding Error}"
+                   Foreground="#DC2626"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8"
+                   Visibility="{Binding HasError, Converter={StaticResource Bool2Vis}}" />
+
+        <!-- 底部：全天（左下）+ 删除 | 保存 / 取消 -->
+        <Grid Grid.Row="9">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="删除" Command="{Binding DeleteCommand}" Padding="12,4"
-                    HorizontalAlignment="Left" Background="Transparent" BorderThickness="0"
-                    Foreground="#B91C1C" Cursor="Hand"
-                    Visibility="{Binding IsEditing, Converter={StaticResource Bool2Vis}}" />
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <CheckBox Content="全天" VerticalAlignment="Center" IsChecked="{Binding IsAllDay}" Margin="0,0,12,0" />
+                <Button Content="删除" Command="{Binding DeleteCommand}" Padding="12,4"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="#B91C1C" Cursor="Hand"
+                        Visibility="{Binding IsEditing, Converter={StaticResource Bool2Vis}}" />
+            </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button Content="保存" Command="{Binding SaveCommand}" Padding="16,4" Margin="0,0,8,0" IsDefault="True" />
                 <Button Content="取消" Command="{Binding CancelCommand}" Padding="16,4" IsCancel="True" />
