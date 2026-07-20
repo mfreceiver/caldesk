@@ -102,7 +102,7 @@ public partial class MonthWindow : Window
         double detailRow = Math.Ceiling(body * 1.35) + 6;
         double detailHdr = Math.Ceiling(body * 1.3) + 10;
         double detailMin = detailHdr + 3 * detailRow;          // 底部 3 行
-        double detailMax = detailHdr + 10 * detailRow;         // 底部 10 行封顶
+        double detailMax = detailHdr + 5 * detailRow;          // 双栏底部 5 行封顶（最多 10 项）
 
         RootGrid.RowDefinitions[2].MinHeight = gridMin;
         RootGrid.RowDefinitions[4].MinHeight = detailMin;

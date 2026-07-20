@@ -45,6 +45,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                 IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                 AllDay = all,
                 Timed = timed,
+                AllEvents = all.Concat(timed).ToList(),
             });
         }
 
@@ -156,6 +157,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             IsToday = date == today,
             AllDay = all,
             Timed = timed,
+            AllEvents = all.Concat(timed).ToList(),
         };
     }
 

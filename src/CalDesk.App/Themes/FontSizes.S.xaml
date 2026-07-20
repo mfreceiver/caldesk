@@ -7,5 +7,5 @@
     <sys:Double x:Key="FontBody">12</sys:Double>
     <sys:Double x:Key="FontBase">13</sys:Double>
     <sys:Double x:Key="FontHeader">15</sys:Double>
-    <sys:Double x:Key="FontTitle">17</sys:Double><sys:Double x:Key="FontMonthCell">11</sys:Double><sys:Double x:Key="FontMonthDate">14</sys:Double>
+    <sys:Double x:Key="FontTitle">17</sys:Double><sys:Double x:Key="FontMonthCell">11</sys:Double><sys:Double x:Key="FontMonthDate">26</sys:Double>
 </ResourceDictionary>
