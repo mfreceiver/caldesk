@@ -28,6 +28,7 @@ public partial class App : Application
     private WeekWindow _week = null!;
     private MonthViewModel _monthVm = null!;
     private MonthWindow _month = null!;
+    private Window? _lastShown;
     private SystemThemeWatcher? _themeWatcher;
 
     // Tray icon is a H.NotifyIcon.Wpf TaskbarIcon declared in App.xaml resources.
@@ -104,9 +105,11 @@ public partial class App : Application
         StartupLog.Log("OnStartup: WeekViewModel created");
 
         _week = new WeekWindow(_vm);
+        _week.Activated += (_, _) => _lastShown = _week;
         ApplyWindowSettings(_week, _settingsSvc.Current);
         StartupLog.Log("OnStartup: WeekWindow constructed");
         _week.Show();
+        _lastShown = _week;
         StartupLog.Log("OnStartup: WeekWindow.Show done");
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
@@ -116,6 +119,7 @@ public partial class App : Application
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
             onEdit: id => _ = OpenQuickAddAsync(null, id));
         _month = new MonthWindow(_monthVm);
+        _month.Activated += (_, _) => _lastShown = _month;
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
         StartupLog.Log("OnStartup: MonthWindow constructed");
@@ -330,7 +334,35 @@ public partial class App : Application
         });
     }
 
-    private void OnShowWindow(object sender, RoutedEventArgs e) => ActivateWeek();
+    private void OnShowWindow(object sender, RoutedEventArgs e) => ToggleActiveWindow();
+
+    private void ToggleActiveWindow()
+    {
+        if (_month.IsVisible)
+        {
+            _lastShown = _month;
+            _month.Hide();
+            return;
+        }
+
+        if (_week.IsVisible)
+        {
+            _lastShown = _week;
+            _week.Hide();
+            return;
+        }
+
+        if (_lastShown == _month)
+        {
+            OpenMonth();
+            return;
+        }
+
+        var window = _lastShown as WeekWindow ?? _week;
+        window.Show();
+        window.Activate();
+        _lastShown = window;
+    }
     private void OnSync(object sender, RoutedEventArgs e) => _ = _sync.RunAsync();
     private void OnSettings(object sender, RoutedEventArgs e) => OpenSettings();
     private void OnAbout(object sender, RoutedEventArgs e) => new AboutWindow { Owner = _week }.ShowDialog();
@@ -364,6 +396,8 @@ public partial class App : Application
             _month.Show();
         }
 
+        _lastShown = _month;
+
         _month.ApplyGadgetStyles();
         ApplyWindowMode(_month, _settingsSvc.Current);
         _monthVm.NavigateTo(DateOnly.FromDateTime(DateTime.Today));
@@ -377,6 +411,8 @@ public partial class App : Application
         {
             _week.Show();
         }
+
+        _lastShown = _week;
 
         _week?.Activate();
     }

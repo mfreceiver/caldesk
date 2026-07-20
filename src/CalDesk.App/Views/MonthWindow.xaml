@@ -106,21 +106,25 @@
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="{DynamicResource DayCardBrush}" />
                                                     <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsWeekend}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource WeekendOverlayBrush}" />
+                                                        </DataTrigger>
                                                         <DataTrigger Binding="{Binding IsInMonth}" Value="False">
-                                                            <Setter Property="Opacity" Value="0.35" />
-                                                            <Setter Property="Background" Value="Transparent" />
+                                                            <Setter Property="Opacity" Value="0.4" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                             <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource TodayBorderBrush}" />
+                                                            <Setter Property="BorderThickness" Value="1" />
                                                             <Setter Property="Opacity" Value="1" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
                                             <Grid>
-                                            <TextBlock Text="{Binding Day}" IsHitTestVisible="False" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                                       FontSize="{DynamicResource FontMonthDate}" FontWeight="Bold" Opacity="0.28" />
-                                            <StackPanel VerticalAlignment="Top" Margin="0,18,0,0">
+                                            <TextBlock Text="{Binding Day}" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       FontSize="{DynamicResource FontMonthDate}" FontWeight="Bold" Opacity="0.2" Panel.ZIndex="0" />
+                                            <StackPanel VerticalAlignment="Top" Margin="0" Panel.ZIndex="1" IsHitTestVisible="False">
                                                 <ItemsControl ItemsSource="{Binding Preview}" IsHitTestVisible="False">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>

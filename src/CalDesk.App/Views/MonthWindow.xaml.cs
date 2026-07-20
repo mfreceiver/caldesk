@@ -97,8 +97,7 @@ public partial class MonthWindow : Window
         double headerFs = (double)Application.Current.FindResource("FontHeader");
 
         double cellRow = Math.Ceiling(monthCell * 1.35) + 2;
-        double dateLayer = Math.Ceiling(monthDate * 1.3) + 4;
-        double cellMin = dateLayer + 3 * cellRow + 2;
+        double cellMin = 3 * cellRow + 6;
         double gridMin = 6 * cellMin;                          // R4：Row2.MinHeight = 6×cell
 
         double detailRow = Math.Ceiling(body * 1.35) + 6;
