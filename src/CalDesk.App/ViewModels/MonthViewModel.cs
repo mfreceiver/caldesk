@@ -1,16 +1,18 @@
 using System.Threading;
+using CalDesk.App.Models;
 using CalDesk.App.Services;
 using CalDesk.Core.Models;
 using CalDesk.Core.Services;
 using CalDesk.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace CalDesk.App.ViewModels;
 
 /// <summary>View model for the month-grid window. Mirrors <see cref="WeekViewModel"/> but builds
 /// a <see cref="MonthView"/> via <see cref="CalendarViewService.BuildMonth"/>.</summary>
-public sealed partial class MonthViewModel : ObservableObject
+public sealed partial class MonthViewModel : ObservableObject, IRecipient<CalendarColorsChangedMessage>, IDisposable
 {
     private readonly StorageServices _store;
     private readonly CalendarViewService _viewService;
@@ -36,9 +38,6 @@ public sealed partial class MonthViewModel : ObservableObject
     [ObservableProperty]
     private WeekDay? _selectedDay;
 
-    /// <summary>Top/bottom split share (0–1, top portion). Persisted/restored by the view.</summary>
-    public double SplitRatio { get; set; } = 0.6;
-
     [ObservableProperty]
     private int _year;
 
@@ -57,6 +56,7 @@ public sealed partial class MonthViewModel : ObservableObject
         _sync = sync;
         _onAddNew = onAddNew;
         _onEdit = onEdit;
+        WeakReferenceMessenger.Default.Register(this);
     }
 
     /// <summary>Exposes the sync runner so the status bar can bind to <see cref="SyncRunner.Status"/>.</summary>
@@ -64,6 +64,14 @@ public sealed partial class MonthViewModel : ObservableObject
 
     /// <summary>Mon..Sun headers, shared with the week view.</summary>
     public IReadOnlyList<string> WeekdayHeaders => CalendarViewService.Headers;
+
+    public void Receive(CalendarColorsChangedMessage _)
+    {
+        Interlocked.Increment(ref _navVersion);
+        _ = LoadAsync();
+    }
+
+    public void Dispose() => WeakReferenceMessenger.Default.Unregister<CalendarColorsChangedMessage>(this);
 
     public void NavigateTo(DateOnly anchor)
     {

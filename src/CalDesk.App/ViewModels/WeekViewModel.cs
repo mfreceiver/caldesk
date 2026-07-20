@@ -1,14 +1,16 @@
 using System.Threading;
+using CalDesk.App.Models;
 using CalDesk.App.Services;
 using CalDesk.Core.Models;
 using CalDesk.Core.Services;
 using CalDesk.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace CalDesk.App.ViewModels;
 
-public sealed partial class WeekViewModel : ObservableObject
+public sealed partial class WeekViewModel : ObservableObject, IRecipient<CalendarColorsChangedMessage>, IDisposable
 {
     private readonly StorageServices _store;
     private readonly CalendarViewService _viewService;
@@ -46,6 +48,7 @@ public sealed partial class WeekViewModel : ObservableObject
         _sync = sync;
         _onAddNew = onAddNew;
         _onEdit = onEdit;
+        WeakReferenceMessenger.Default.Register(this);
     }
 
     /// <summary>Exposes the sync runner so the status bar can bind to its <see cref="SyncRunner.Status"/>.</summary>
@@ -55,10 +58,7 @@ public sealed partial class WeekViewModel : ObservableObject
     {
         var v = Interlocked.Increment(ref _navVersion);
         WeekStart = monday;
-        var end = monday.AddDays(6);
-        WeekHeader = end.Month == monday.Month
-            ? $"{monday.Month}月{monday.Day}日—{end.Day}日"
-            : $"{monday.Month}月{monday.Day}日—{end.Month}月{end.Day}日";
+        WeekHeader = WeekOfMonthCalculator.Header(monday);
         _ = LoadAsync(v);
     }
 
@@ -122,4 +122,14 @@ public sealed partial class WeekViewModel : ObservableObject
         var diff = (7 + (d.DayOfWeek - DayOfWeek.Monday)) % 7;
         return d.AddDays(-diff);
     }
+
+    /// <summary>R12：日历颜色/选择本地变更后刷新色点（无服务器同步）。
+    /// 递增 nav 版本以弃用任何在飞的 LoadAsync，再起一次新加载。</summary>
+    public void Receive(CalendarColorsChangedMessage _)
+    {
+        Interlocked.Increment(ref _navVersion);
+        _ = LoadAsync();
+    }
+
+    public void Dispose() => WeakReferenceMessenger.Default.Unregister<CalendarColorsChangedMessage>(this);
 }

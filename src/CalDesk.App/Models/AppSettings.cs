@@ -15,6 +15,14 @@ public enum FontSizeLevel
     Large,
 }
 
+/// <summary>Theme mode: follow OS, force light, or force dark. Default light (§3.7, decision 10).</summary>
+public enum ThemeMode
+{
+    FollowSystem,
+    Light,
+    Dark,
+}
+
 /// <summary>User-tunable application settings, persisted as JSON in %AppData%\CalDesk.</summary>
 public sealed class AppSettings
 {
@@ -45,6 +53,9 @@ public sealed class AppSettings
     /// <summary>Font size tier; swapped at runtime via <c>App.ApplyFontSize</c>.</summary>
     public FontSizeLevel FontSize { get; set; } = FontSizeLevel.Small;
 
+    /// <summary>Theme mode; swapped at runtime via <c>App.ApplyTheme</c>. Default light.</summary>
+    public ThemeMode Theme { get; set; } = ThemeMode.Light;
+
     // --- Window-size persistence (used by Task 3: borderless resize + DPI robustness) ---
 
     /// <summary>Persisted week-window width (DIU). NaN = use default size.</summary>
@@ -58,7 +69,4 @@ public sealed class AppSettings
 
     /// <summary>Persisted month-window height (DIU). NaN = use default size.</summary>
     public double MonthWindowHeight { get; set; } = double.NaN;
-
-    /// <summary>Month-view top/bottom split ratio (0–1, top share). Default 0.6.</summary>
-    public double MonthSplitRatio { get; set; } = 0.6;
 }

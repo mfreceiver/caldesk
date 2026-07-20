@@ -1,0 +1,40 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- surfaces（R7：不透明，透明感交由窗口 Opacity） -->
+    <SolidColorBrush x:Key="SurfaceBrush"            Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="HeaderBrush"             Color="#FFF1F3F9" />
+    <SolidColorBrush x:Key="ControlBgBrush"          Color="#FFFFFFFF" />
+
+    <!-- text -->
+    <SolidColorBrush x:Key="ForegroundBrush"         Color="#FF1F2937" />
+    <SolidColorBrush x:Key="MutedForegroundBrush"    Color="#FF646E7A" />
+    <SolidColorBrush x:Key="OnAccentBrush"           Color="#FFFFFFFF" />
+
+    <!-- borders -->
+    <SolidColorBrush x:Key="BorderBrush"             Color="#FFE5E7EB" />
+    <SolidColorBrush x:Key="BorderHoverBrush"        Color="#FFD1D5DB" />
+
+    <!-- accent family（accent #2563EB 白字 5.1:1） -->
+    <SolidColorBrush x:Key="AccentBrush"             Color="#FF2563EB" />
+    <SolidColorBrush x:Key="AccentHoverBrush"        Color="#FF1D4ED8" />
+    <SolidColorBrush x:Key="AccentPressedBrush"      Color="#FF1E40AF" />
+    <SolidColorBrush x:Key="AccentSoftBrush"         Color="#FFDBEAFE" /> <!-- 当天淡填+all-day pill -->
+    <SolidColorBrush x:Key="TodayBorderBrush"        Color="#FF93C5FD" />
+    <SolidColorBrush x:Key="SelectionBrush"          Color="#402563EB" />
+
+    <!-- danger（验证红+周末红+进行中红 统一） -->
+    <SolidColorBrush x:Key="DangerBrush"             Color="#FFDC2626" />
+
+    <!-- overlays -->
+    <SolidColorBrush x:Key="HoverOverlayBrush"       Color="#14000000" />
+    <SolidColorBrush x:Key="PressedOverlayBrush"     Color="#22000000" />
+    <SolidColorBrush x:Key="DayCardBrush"            Color="#0D000000" />
+    <SolidColorBrush x:Key="WeekendOverlayBrush"     Color="#14000000" />
+
+    <!-- scrollbar -->
+    <SolidColorBrush x:Key="ScrollBarThumbBrush"      Color="#59646E7A" />
+    <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#8C646E7A" />
+    <SolidColorBrush x:Key="ScrollBarTrackBrush"      Color="Transparent" />
+
+    <SolidColorBrush x:Key="SwatchRingBrush"         Color="#FFFFFFFF" />
+</ResourceDictionary>

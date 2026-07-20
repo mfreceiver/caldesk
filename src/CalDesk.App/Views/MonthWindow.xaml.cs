@@ -37,8 +37,7 @@ public partial class MonthWindow : Window
         if (e.OriginalSource is DependencyObject src &&
             (FindAncestor<ResizeGrip>(src) is not null ||
              FindAncestor<Button>(src) is not null ||
-             FindAncestor<ScrollBar>(src) is not null ||
-             FindAncestor<GridSplitter>(src) is not null))
+             FindAncestor<ScrollBar>(src) is not null))
         {
             return;
         }
@@ -82,30 +81,36 @@ public partial class MonthWindow : Window
         base.OnClosing(e);
     }
 
-    // --- Top/bottom split ratio persistence (GridSplitter Row2↔Row4) ---
+    private void OnLoaded(object sender, RoutedEventArgs e) => ComputeBottomLimits();
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => ApplySplitRatio(ViewModel.SplitRatio);
-
-    private void OnSplitChanged(object sender, DragCompletedEventArgs e)
+    /// <summary>
+    /// M3 / §3.16: recompute month-grid and detail-panel min/max heights from the active font-size tier.
+    /// Public so <c>App.ApplyFontSize</c> can re-run after S/M/L changes.
+    /// </summary>
+    public void ComputeBottomLimits()
     {
-        var top = RootGrid.RowDefinitions[2].ActualHeight;
-        var bottom = RootGrid.RowDefinitions[4].ActualHeight;
-        var total = top + bottom;
-        if (total > 0)
-        {
-            ViewModel.SplitRatio = top / total;
-            ApplySplitRatio(ViewModel.SplitRatio);
-        }
-    }
+        double body = (double)Application.Current.FindResource("FontBody");
+        double tiny = (double)Application.Current.FindResource("FontTiny");
+        double micro = (double)Application.Current.FindResource("FontMicro");
+        double small = (double)Application.Current.FindResource("FontSmall");
+        double headerFs = (double)Application.Current.FindResource("FontHeader");
 
-    private void ApplySplitRatio(double ratio)
-    {
-        if (double.IsNaN(ratio) || ratio <= 0.02 || ratio >= 0.98)
-        {
-            return;
-        }
+        double cellRow = Math.Ceiling(tiny * 1.35) + 2;        // 日格事件行
+        double datePill = Math.Ceiling(small * 1.3) + 4;       // 日格日期药丸
+        double cellMin = datePill + 3 * cellRow + 2;           // 每格 3 事件
+        double gridMin = 6 * cellMin;                          // R4：Row2.MinHeight = 6×cell
 
-        RootGrid.RowDefinitions[2].Height = new GridLength(ratio * 100.0, GridUnitType.Star);
-        RootGrid.RowDefinitions[4].Height = new GridLength((1.0 - ratio) * 100.0, GridUnitType.Star);
+        double detailRow = Math.Ceiling(body * 1.35) + 6;
+        double detailHdr = Math.Ceiling(body * 1.3) + 10;
+        double detailMin = detailHdr + 3 * detailRow;          // 底部 3 行
+        double detailMax = detailHdr + 10 * detailRow;         // 底部 10 行封顶
+
+        RootGrid.RowDefinitions[2].MinHeight = gridMin;
+        RootGrid.RowDefinitions[4].MinHeight = detailMin;
+        RootGrid.RowDefinitions[4].MaxHeight = detailMax;
+
+        double chrome = 24 + (Math.Ceiling(headerFs * 1.3) + 20) + (Math.Ceiling(micro * 1.3) + 8) + 10
+                        + (Math.Ceiling(small * 1.3) + 18);
+        MinHeight = chrome + gridMin + detailMin;              // ≈600 @ S
     }
 }

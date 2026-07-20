@@ -6,11 +6,11 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Palette.Light.xaml" />
                 <ResourceDictionary Source="Themes/FontSizes.S.xaml" />
                 <ResourceDictionary Source="Themes/AppControls.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <SolidColorBrush x:Key="HeaderBrushWeek" Color="#FFF1F3F9" />
-            <SolidColorBrush x:Key="HeaderBrushMonth" Color="#FFF6F1F4" />
+            <FontFamily x:Key="AppFont">Microsoft YaHei UI</FontFamily>
             <tb:TaskbarIcon x:Key="TrayIcon"
                             ToolTipText="CalDesk"
                             TrayLeftMouseDoubleClick="OnShowWindow">

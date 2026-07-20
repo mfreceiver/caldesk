@@ -9,14 +9,14 @@
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False"
-        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
+        FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
     </Window.Resources>
 
     <!-- Card surface: matches the main windows (WeekWindow/MonthWindow) —
-         borderless, transparent, rounded #F4FFFFFF card + soft drop shadow. -->
-    <Border Background="#F4FFFFFF" CornerRadius="10" Padding="16"
+         borderless, transparent, rounded SurfaceBrush card + soft drop shadow. -->
+    <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="10" Padding="16"
             TextOptions.TextFormattingMode="Display"
             TextOptions.TextRenderingMode="Auto">
         <Border.Effect>
@@ -63,7 +63,7 @@
                            VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="×"
                         Style="{StaticResource CardGhostButton}"
-                        Foreground="#FF6B7280"
+                        Foreground="{DynamicResource MutedForegroundBrush}"
                         FontSize="{DynamicResource FontHeader}"
                         Padding="8,2"
                         VerticalAlignment="Center"
@@ -107,7 +107,7 @@
                         <Style TargetType="TextBox" BasedOn="{StaticResource CardTextBox}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding StartTimeInvalid}" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
                                     <Setter Property="BorderThickness" Value="1.5" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -133,7 +133,7 @@
                         <Style TargetType="DatePicker" BasedOn="{StaticResource CardDatePicker}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
                                     <Setter Property="BorderThickness" Value="1.5" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -149,11 +149,11 @@
                         <Style TargetType="TextBox" BasedOn="{StaticResource CardTextBox}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding EndTimeInvalid}" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
                                     <Setter Property="BorderThickness" Value="1.5" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding RangeInvalid}" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
                                     <Setter Property="BorderThickness" Value="1.5" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -189,7 +189,7 @@
                         <Style TargetType="ComboBox" BasedOn="{StaticResource CardComboBox}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding CalendarInvalid}" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FFDC2626" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
                                     <Setter Property="BorderThickness" Value="1.5" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -229,14 +229,14 @@
             <Button Grid.Row="8" Content="[ 更多选项 ]"
                     Style="{StaticResource CardGhostButton}"
                     Command="{Binding MoreCommand}"
-                    Foreground="#FF3B82F6"
+                    Foreground="{DynamicResource AccentBrush}"
                     HorizontalAlignment="Left"
                     Margin="64,0,0,8" />
 
             <!-- 校验错误（非空时显示） -->
             <TextBlock Grid.Row="9"
                        Text="{Binding Error}"
-                       Foreground="#FFDC2626"
+                       Foreground="{DynamicResource DangerBrush}"
                        FontSize="{DynamicResource FontSmall}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,8"
@@ -256,7 +256,7 @@
                     <Button Content="删除"
                             Style="{StaticResource CardGhostButton}"
                             Command="{Binding DeleteCommand}"
-                            Foreground="#FFB91C1C"
+                            Foreground="{DynamicResource DangerBrush}"
                             Visibility="{Binding IsEditing, Converter={StaticResource Bool2Vis}}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">

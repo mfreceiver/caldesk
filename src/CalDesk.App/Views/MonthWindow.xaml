@@ -4,74 +4,21 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
+        xmlns:conv="clr-namespace:CalDesk.App.Converters"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:MonthViewModel}"
-        Title="CalDesk 月视图" Width="380" Height="520"
-        MinWidth="380" MinHeight="520"
+        Title="CalDesk 月视图" Width="380" Height="640"
+        MinWidth="380"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="CanResize"
-        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}"
+        FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}"
         Loaded="OnLoaded">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
-        <Style x:Key="GhostButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="#1F2937" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Padding" Value="6,2" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style x:Key="RowButton" TargetType="Button">
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <ContentPresenter />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- Segmented 周/月 toggle: 月 active in month window; 周 click returns to week. -->
-        <Style x:Key="ToggleSegment" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="#6B7280" />
-            <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
-            <Setter Property="FontSize" Value="{DynamicResource FontBody}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Padding" Value="10,3" />
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                CornerRadius="5" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#14000000" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="ToggleSegmentActive" TargetType="Button" BasedOn="{StaticResource ToggleSegment}">
-            <Setter Property="Background" Value="#FFFFFFFF" />
-            <Setter Property="Foreground" Value="#1F2937" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
+        <conv:ColorOrAccentConverter x:Key="ColorOrAccent" />
+        <conv:BrushResourceProxy x:Key="AccentProxy" Brush="{DynamicResource AccentBrush}" />
     </Window.Resources>
 
-    <Border Background="#F4FFFFFF" CornerRadius="10" Padding="12" MouseLeftButtonDown="OnDrag">
+    <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="10" Padding="12" MouseLeftButtonDown="OnDrag">
         <Border.Effect>
             <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" Color="Black" />
         </Border.Effect>
@@ -79,14 +26,14 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />   <!-- header -->
                 <RowDefinition Height="Auto" />   <!-- weekday headers -->
-                <RowDefinition Height="3*" MinHeight="180" /> <!-- top month grid -->
-                <RowDefinition Height="Auto" />   <!-- GridSplitter -->
-                <RowDefinition Height="2*" MinHeight="140" /> <!-- bottom day detail -->
+                <RowDefinition Height="3*" />     <!-- top month grid (MinHeight via ComputeBottomLimits) -->
+                <RowDefinition Height="Auto" />   <!-- hairline (M5) -->
+                <RowDefinition Height="2*" />     <!-- bottom day detail (Min/Max via ComputeBottomLimits) -->
                 <RowDefinition Height="Auto" />   <!-- status -->
             </Grid.RowDefinitions>
 
             <!-- header: 今天 (left) | ‹ MonthHeader › (center) | 周/月 toggle (right), on a soft band -->
-            <Border Grid.Row="0" Background="{StaticResource HeaderBrushMonth}" CornerRadius="8" Padding="10,6" Margin="0,0,0,8">
+            <Border Grid.Row="0" Background="{DynamicResource HeaderBrush}" CornerRadius="8" Padding="10,6" Margin="0,0,0,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -107,7 +54,7 @@
                                 Command="{Binding NextMonthCommand}" Margin="2,0,0,0" />
                     </StackPanel>
 
-                    <Border Grid.Column="2" Background="#14000000" CornerRadius="7" Padding="2"
+                    <Border Grid.Column="2" Background="{DynamicResource HoverOverlayBrush}" CornerRadius="7" Padding="2"
                             VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <Button Content="周" Style="{StaticResource ToggleSegment}"
@@ -158,27 +105,28 @@
                                         <Border MinHeight="92" Padding="2,1" CornerRadius="4">
                                             <Border.Style>
                                                 <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#0A000000" />
+                                                    <Setter Property="Background" Value="{DynamicResource DayCardBrush}" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsInMonth}" Value="False">
                                                             <Setter Property="Opacity" Value="0.35" />
                                                             <Setter Property="Background" Value="Transparent" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                            <Setter Property="Background" Value="#143B82F6" />
+                                                            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
                                                             <Setter Property="Opacity" Value="1" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
-                                            <StackPanel>
+                                            <StackPanel VerticalAlignment="Center">
                                                 <Border CornerRadius="7" Padding="6,1" Margin="1,0,1,2" HorizontalAlignment="Left">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
                                                             <Setter Property="Background" Value="Transparent" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                    <Setter Property="Background" Value="#3B82F6" />
+                                                                    <!-- solid accent pill + OnAccent text (maps #3B82F6) -->
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
@@ -186,14 +134,14 @@
                                                     <TextBlock Text="{Binding Day}" FontSize="{DynamicResource FontSmall}" HorizontalAlignment="Center">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="#1F2937" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
                                                                 <Setter Property="FontWeight" Value="Normal" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding IsWeekend}" Value="True">
-                                                                        <Setter Property="Foreground" Value="#B91C1C" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                        <Setter Property="Foreground" Value="#FFFFFF" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
                                                                         <Setter Property="FontWeight" Value="Bold" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
@@ -207,20 +155,33 @@
                                                             <Button Style="{StaticResource RowButton}" Margin="0"
                                                                     Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                     CommandParameter="{Binding EventId}">
-                                                                <StackPanel Orientation="Horizontal">
-                                                                    <Border Width="5" Height="5" CornerRadius="2" Margin="0,0,3,0"
-                                                                            Background="{Binding Color, TargetNullValue=#3B82F6}" Opacity="0.85"
-                                                                            VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontTiny}"
-                                                                               TextTrimming="CharacterEllipsis" MaxWidth="34" />
-                                                                </StackPanel>
+                                                                <!-- M2 月格：2 列 [色点|Summary]，不显 TimeLabel（R11） -->
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Border Grid.Column="0" Width="5" Height="5" CornerRadius="2" Margin="0,0,3,0"
+                                                                            Opacity="0.85" VerticalAlignment="Center">
+                                                                        <Border.Background>
+                                                                            <MultiBinding Converter="{StaticResource ColorOrAccent}">
+                                                                                <Binding Path="Color" />
+                                                                                <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
+                                                                            </MultiBinding>
+                                                                        </Border.Background>
+                                                                    </Border>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Summary}"
+                                                                               FontSize="{DynamicResource FontTiny}"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                </Grid>
                                                             </Button>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
                                                 <!-- Overflow indicator (+N): clicking the cell already triggers SelectDay -->
                                                 <TextBlock Text="{Binding OverflowCount, StringFormat={}+{0}}"
-                                                           FontSize="{DynamicResource FontTiny}" Foreground="#6B7280" Margin="2,0,0,0"
+                                                           FontSize="{DynamicResource FontTiny}"
+                                                           Foreground="{DynamicResource MutedForegroundBrush}" Margin="2,0,0,0"
                                                            Visibility="{Binding HasOverflow, Converter={StaticResource Bool2Vis}}" />
                                             </StackPanel>
                                         </Border>
@@ -232,10 +193,9 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- GridSplitter: drag to rebalance top/bottom; persisted via vm.SplitRatio -->
-            <GridSplitter Grid.Row="3" Height="6" HorizontalAlignment="Stretch"
-                          Background="#11000000" ResizeBehavior="PreviousAndNext"
-                          DragCompleted="OnSplitChanged" />
+            <!-- M5: static hairline (GridSplitter removed) -->
+            <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                    Margin="0,6,0,4" SnapsToDevicePixels="True" />
 
             <!-- bottom day-detail: header line + per-day ＋, then all-day + timed events -->
             <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Padding="2,0,6,0">
@@ -289,53 +249,86 @@
                             </Style>
                         </StackPanel.Style>
 
-                        <!-- all-day events -->
+                        <!-- all-day events: W5/W6 3-col grid, AccentSoft pill -->
                         <ItemsControl ItemsSource="{Binding SelectedDay.AllDay}" Margin="0,0,0,2">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Style="{StaticResource RowButton}" Margin="0,1"
                                             Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding EventId}">
-                                        <Border Background="#223B82F6" CornerRadius="4" Padding="6,2" Margin="0,1">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Border Width="5" Height="5" CornerRadius="2" Margin="0,0,5,0"
-                                                        Background="{Binding Color, TargetNullValue=#3B82F6}" Opacity="0.9"
-                                                        VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontBody}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
+                                        <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="4" Padding="6,2" Margin="0,1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="46" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding TimeLabel}"
+                                                           FontSize="{DynamicResource FontSmall}"
+                                                           Foreground="{DynamicResource AccentBrush}"
+                                                           VerticalAlignment="Center" />
+                                                <Border Grid.Column="1" Width="5" Height="5" CornerRadius="2" Margin="0,0,5,0"
+                                                        Opacity="0.9" VerticalAlignment="Center">
+                                                    <Border.Background>
+                                                        <MultiBinding Converter="{StaticResource ColorOrAccent}">
+                                                            <Binding Path="Color" />
+                                                            <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
+                                                        </MultiBinding>
+                                                    </Border.Background>
+                                                </Border>
+                                                <TextBlock Grid.Column="2" Text="{Binding Summary}"
+                                                           FontSize="{DynamicResource FontBody}"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                            </Grid>
                                         </Border>
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- timed events -->
+                        <!-- timed events: W5/W6 Grid 3 列 [TimeLabel|色点|Summary] -->
                         <ItemsControl ItemsSource="{Binding SelectedDay.Timed}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Style="{StaticResource RowButton}" Margin="0,1"
                                             Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding EventId}">
-                                        <StackPanel Orientation="Horizontal" Margin="0,1">
-                                            <TextBlock Text="{Binding TimeLabel}" FontSize="{DynamicResource FontSmall}" Foreground="#3B82F6"
-                                                       Width="46" VerticalAlignment="Top" />
-                                            <Border Width="5" Height="5" CornerRadius="2" Margin="2,3,5,0"
-                                                    Background="{Binding Color, TargetNullValue=#3B82F6}" Opacity="0.9"
-                                                    VerticalAlignment="Top" />
-                                            <TextBlock Text="{Binding Summary}" FontSize="{DynamicResource FontBody}" TextWrapping="Wrap">
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="46" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding TimeLabel}"
+                                                       FontSize="{DynamicResource FontSmall}"
+                                                       Foreground="{DynamicResource AccentBrush}"
+                                                       VerticalAlignment="Center" />
+                                            <Border Grid.Column="1" Width="5" Height="5" CornerRadius="2" Margin="0,0,5,0"
+                                                    Opacity="0.9" VerticalAlignment="Center">
+                                                <Border.Background>
+                                                    <MultiBinding Converter="{StaticResource ColorOrAccent}">
+                                                        <Binding Path="Color" />
+                                                        <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
+                                                    </MultiBinding>
+                                                </Border.Background>
+                                            </Border>
+                                            <TextBlock Grid.Column="2" Text="{Binding Summary}"
+                                                       FontSize="{DynamicResource FontBody}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsOngoing}" Value="True">
                                                                 <Setter Property="FontWeight" Value="Bold" />
-                                                                <Setter Property="Foreground" Value="#B91C1C" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                        </StackPanel>
+                                        </Grid>
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

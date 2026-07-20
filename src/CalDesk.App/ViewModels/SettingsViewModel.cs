@@ -10,6 +10,7 @@ using CalDesk.Core.Services;
 using CalDesk.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace CalDesk.App.ViewModels;
 
@@ -80,12 +81,17 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Rows for the "日历管理" panel — one per known calendar. Each row exposes
     /// bindable <see cref="CalendarRow.IsSelected"/> / <see cref="CalendarRow.Color"/>
-    /// which the user edits; <see cref="SaveCalendarsCommand"/> persists the deltas.</summary>
+    /// which the user edits; <see cref="SavePropertiesCommand"/> persists the deltas
+    /// via <see cref="SaveCalendarRowsAsync"/> (local DB only, no server sync).</summary>
     public ObservableCollection<CalendarRow> CalendarRows { get; } = new();
 
     /// <summary>Current S/M/L font tier mirrored from <see cref="AppSettings.FontSize"/>.
     /// Bound to the radio-button group in the Display section; setter applies live + persists.</summary>
     [ObservableProperty] private FontSizeLevel _fontSize;
+
+    /// <summary>Theme mode (FollowSystem/Light/Dark) mirrored from <see cref="AppSettings.Theme"/>.
+    /// Bound to the theme radio group (§3.17); setter applies live via <c>App.ApplyTheme</c> + persists.</summary>
+    [ObservableProperty] private ThemeMode _theme = ThemeMode.Light;
 
     public SettingsViewModel(StorageServices store, SettingsService settingsService, ICredentialStore credentials, ICalDavClientFactory factory, SyncRunner sync)
     {
@@ -120,6 +126,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         DefaultReminderMinutes = _settings.DefaultReminderMinutes;
 
         FontSize = _settings.FontSize;
+        Theme = _settings.Theme;
 
         await RefreshCalendarsAsync();
         SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == _settings.DefaultCalendarId)
@@ -134,7 +141,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == prev) ?? Calendars.FirstOrDefault();
 
         // Rebuild the management rows from the latest stored state. Snapshot IsSelected/Color
-        // at row-build time so SaveCalendarsCommand can diff against the stored values.
+        // at row-build time so SavePropertiesAsync can diff against the stored values.
         CalendarRows.Clear();
         foreach (var c in Calendars)
         {
@@ -151,6 +158,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         _settings.FontSize = value;
+        _settingsService.Save(_settings);
+    }
+
+    /// <summary>§3.17: apply theme live (swap Palette dictionary) + persist so the choice
+    /// survives restart. FollowSystem is resolved to the OS theme at apply time.</summary>
+    partial void OnThemeChanged(ThemeMode value)
+    {
+        if (Application.Current is App app)
+        {
+            app.ApplyTheme(value);
+        }
+
+        _settings.Theme = value;
         _settingsService.Save(_settings);
     }
 
@@ -276,36 +296,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Saves the non-account properties (window, defaults, autostart) and closes.</summary>
+    /// <summary>§3.14 S4: save calendar rows (local) then non-account properties, broadcast
+    /// <see cref="CalendarColorsChangedMessage"/> so open week/month windows refresh color dots
+    /// without a server sync, then close.</summary>
     /// <remarks>
     /// Credentials are written only from <see cref="SaveAccountAsync"/>, and only when
     /// <see cref="Password"/> is non-empty. <see cref="TestConnectionAsync"/> never mutates
     /// the credential store. This method never touches <see cref="ICredentialStore"/> so an
     /// empty password box cannot clobber a stored secret.
+    /// Order: calendars first, then settings (R13) — calendar failure aborts before settings write.
     /// </remarks>
     [RelayCommand]
-    private void SaveProperties()
-    {
-        _settings.WindowMode = WindowMode;
-        _settings.Opacity = Math.Clamp(Opacity, 0.15, 1.0);
-        // Lock position only applies in Desktop-bottom mode.
-        _settings.LockedPosition = WindowMode == WindowMode.Desktop && LockedPosition;
-        _settings.StartWithWindows = StartWithWindows;
-        _settings.DefaultDurationMinutes = DefaultDurationMinutes;
-        _settings.DefaultReminderMinutes = DefaultReminderMinutes;
-        _settings.DefaultCalendarId = SelectedCalendar?.Id;
-        _settingsService.Save(_settings);
-
-        StartupHelper.Set(StartWithWindows, Environment.ProcessPath ?? AppExePath());
-        RequestClose?.Invoke();
-    }
-
-    /// <summary>Persist per-calendar visibility/color edits (Color + IsSelected) for every row
-    /// whose state differs from what's currently stored, then trigger a view refresh so
-    /// week/month VMs drop/respickup the affected calendars. Mirrors the save-then-refresh
-    /// pattern in <see cref="SaveAccountAsync"/>.</summary>
-    [RelayCommand]
-    private async Task SaveCalendarsAsync()
+    private async Task SavePropertiesAsync()
     {
         if (IsBusy)
         {
@@ -313,40 +315,49 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         IsBusy = true;
-        StatusText = "正在保存日历设置…";
         try
         {
-            var stored = (await _store.Calendars.GetAllAsync()).ToDictionary(c => c.Id);
-            foreach (var row in CalendarRows)
-            {
-                if (!stored.TryGetValue(row.Id, out var cur))
-                {
-                    continue;
-                }
+            // R13: calendars first — failure leaves settings untouched (no partial commit).
+            await SaveCalendarRowsAsync();
 
-                // Diff against the stored snapshot — only write when something actually changed.
-                if (cur.IsSelected != row.IsSelected || !StringEquals(cur.Color, row.Color))
-                {
-                    var updated = row.ToCalendarInfo(cur);
-                    await _store.Calendars.UpsertAsync(updated);
-                }
-            }
+            _settings.WindowMode = WindowMode;
+            _settings.Opacity = Math.Clamp(Opacity, 0.15, 1.0);
+            // Lock position only applies in Desktop-bottom mode.
+            _settings.LockedPosition = WindowMode == WindowMode.Desktop && LockedPosition;
+            _settings.StartWithWindows = StartWithWindows;
+            _settings.DefaultDurationMinutes = DefaultDurationMinutes;
+            _settings.DefaultReminderMinutes = DefaultReminderMinutes;
+            _settings.DefaultCalendarId = SelectedCalendar?.Id;
+            _settingsService.Save(_settings);
 
-            await RefreshCalendarsAsync();
+            StartupHelper.Set(StartWithWindows, Environment.ProcessPath ?? AppExePath());
 
-            // Push a sync-triggered reload so the week/month VMs re-pull with the new selection.
-            await _sync.RunAsync();
-
-            StatusText = "日历设置已保存";
-        }
-        catch (Exception ex)
-        {
-            StatusText = "保存失败：" + ex.Message;
-            Error?.Invoke(ex.Message);
+            // Refresh open week/month windows (local color/selection only — no server sync).
+            WeakReferenceMessenger.Default.Send(new CalendarColorsChangedMessage());
+            RequestClose?.Invoke();
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>Diff CalendarRows against stored calendars and upsert changed IsSelected/Color.
+    /// Local DB only — does not call <see cref="SyncRunner"/>.</summary>
+    private async Task SaveCalendarRowsAsync()
+    {
+        var stored = (await _store.Calendars.GetAllAsync()).ToDictionary(c => c.Id);
+        foreach (var row in CalendarRows)
+        {
+            if (!stored.TryGetValue(row.Id, out var cur))
+            {
+                continue;
+            }
+
+            if (cur.IsSelected != row.IsSelected || !StringEquals(cur.Color, row.Color))
+            {
+                await _store.Calendars.UpsertAsync(row.ToCalendarInfo(cur));
+            }
         }
     }
 

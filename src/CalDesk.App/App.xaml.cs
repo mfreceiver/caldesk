@@ -28,6 +28,7 @@ public partial class App : Application
     private WeekWindow _week = null!;
     private MonthViewModel _monthVm = null!;
     private MonthWindow _month = null!;
+    private SystemThemeWatcher? _themeWatcher;
 
     // Tray icon is a H.NotifyIcon.Wpf TaskbarIcon declared in App.xaml resources.
     // Accessed dynamically to avoid binding the build to its exact API surface.
@@ -64,6 +65,16 @@ public partial class App : Application
         StartupLog.Log($"OnStartup: settings loaded  mode={_settingsSvc.Current.WindowMode}  acceptInsecureTls={_settingsSvc.Current.AcceptInsecureTls}  acctCfgStartWithWindows={_settingsSvc.Current.StartWithWindows}");
         ApplyFontSize(_settingsSvc.Current.FontSize);
         StartupLog.Log($"OnStartup: font size applied  fontSize={_settingsSvc.Current.FontSize}");
+
+        // §3.6: apply persisted theme + wire OS theme watcher (R5 weak-ref + SessionSwitch + Dispatcher).
+        ApplyTheme(_settingsSvc.Current.Theme);
+        _themeWatcher = new SystemThemeWatcher(Dispatcher);
+        _themeWatcher.EffectiveThemeChanged += t =>
+        {
+            if (_settingsSvc.Current.Theme == ThemeMode.FollowSystem) ApplyTheme(ThemeMode.FollowSystem);
+        };
+        _themeWatcher.Start();
+        StartupLog.Log($"OnStartup: theme applied  theme={_settingsSvc.Current.Theme}");
 
         _creds = new WindowsCredentialStore();
         StartupLog.Log("OnStartup: WindowsCredentialStore created");
@@ -104,7 +115,6 @@ public partial class App : Application
         _monthVm = new MonthViewModel(_store, _viewSvc, _sync,
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
             onEdit: id => _ = OpenQuickAddAsync(null, id));
-        _monthVm.SplitRatio = Math.Clamp(_settingsSvc.Current.MonthSplitRatio, 0.1, 0.9);
         _month = new MonthWindow(_monthVm);
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
@@ -181,6 +191,39 @@ public partial class App : Application
         }
 
         dict.Add(new ResourceDictionary { Source = new Uri(src, UriKind.Relative) });
+
+        // R4 (§3.6): recompute MonthView bottom limits so 3-line min / 10-line cap track the new font tier.
+        foreach (var w in Application.Current.Windows.OfType<Views.MonthWindow>())
+        {
+            w.ComputeBottomLimits();
+        }
+    }
+
+    /// <summary>R6 (§3.6): swap the merged Palette dictionary in place (index replacement,
+    /// prepare-new-then-replace-old) to avoid an intermediate null lookup that would flash
+    /// default-themed pixels. Falls back to Insert(0) if no Palette entry exists yet.</summary>
+    public void ApplyTheme(ThemeMode mode)
+    {
+        var effective = mode == ThemeMode.FollowSystem
+            ? SystemThemeWatcher.GetEffectiveTheme() : mode;
+        var src = effective == ThemeMode.Dark ? "Themes/Palette.Dark.xaml" : "Themes/Palette.Light.xaml";
+        var replacement = new ResourceDictionary { Source = new Uri(src, UriKind.Relative) };
+
+        var dict = Resources.MergedDictionaries;
+        int idx = -1;
+        for (var i = 0; i < dict.Count; i++)
+        {
+            var os = dict[i].Source?.OriginalString ?? string.Empty;
+            if (os.Contains("/Palette.", StringComparison.Ordinal)
+                || os.EndsWith("Palette.Light.xaml", StringComparison.Ordinal)
+                || os.EndsWith("Palette.Dark.xaml", StringComparison.Ordinal))
+            {
+                idx = i;
+                break;
+            }
+        }
+
+        if (idx >= 0) dict[idx] = replacement; else dict.Insert(0, replacement);
     }
 
     private static void ApplyWindowSettings(WeekWindow w, AppSettings s)
@@ -415,10 +458,10 @@ public partial class App : Application
         {
             s.MonthWindowWidth = monthWin.Width;
             s.MonthWindowHeight = monthWin.Height;
-            s.MonthSplitRatio = _monthVm.SplitRatio;
         }
 
         _settingsSvc.Save(s);
+        _themeWatcher?.Dispose();
         _reminders?.Dispose();
         _sync?.Dispose();
         try
