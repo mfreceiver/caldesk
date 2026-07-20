@@ -71,7 +71,7 @@ public partial class App : Application
         _themeWatcher = new SystemThemeWatcher(Dispatcher);
         _themeWatcher.EffectiveThemeChanged += t =>
         {
-            if (_settingsSvc.Current.Theme == ThemeMode.FollowSystem) ApplyTheme(ThemeMode.FollowSystem);
+            if (_settingsSvc.Current.Theme == AppThemeMode.FollowSystem) ApplyTheme(AppThemeMode.FollowSystem);
         };
         _themeWatcher.Start();
         StartupLog.Log($"OnStartup: theme applied  theme={_settingsSvc.Current.Theme}");
@@ -202,11 +202,11 @@ public partial class App : Application
     /// <summary>R6 (§3.6): swap the merged Palette dictionary in place (index replacement,
     /// prepare-new-then-replace-old) to avoid an intermediate null lookup that would flash
     /// default-themed pixels. Falls back to Insert(0) if no Palette entry exists yet.</summary>
-    public void ApplyTheme(ThemeMode mode)
+    public void ApplyTheme(AppThemeMode mode)
     {
-        var effective = mode == ThemeMode.FollowSystem
+        var effective = mode == AppThemeMode.FollowSystem
             ? SystemThemeWatcher.GetEffectiveTheme() : mode;
-        var src = effective == ThemeMode.Dark ? "Themes/Palette.Dark.xaml" : "Themes/Palette.Light.xaml";
+        var src = effective == AppThemeMode.Dark ? "Themes/Palette.Dark.xaml" : "Themes/Palette.Light.xaml";
         var replacement = new ResourceDictionary { Source = new Uri(src, UriKind.Relative) };
 
         var dict = Resources.MergedDictionaries;

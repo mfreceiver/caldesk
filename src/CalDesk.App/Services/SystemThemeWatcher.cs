@@ -16,7 +16,7 @@ public sealed class SystemThemeWatcher : IDisposable
 
     public SystemThemeWatcher(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
-    public event Action<ThemeMode>? EffectiveThemeChanged;
+    public event Action<AppThemeMode>? EffectiveThemeChanged;
 
     public void Start()
     {
@@ -53,15 +53,15 @@ public sealed class SystemThemeWatcher : IDisposable
             new Action(() => w.EffectiveThemeChanged?.Invoke(SystemThemeWatcher.GetEffectiveTheme())));
     }
 
-    public static ThemeMode GetEffectiveTheme()
+    public static AppThemeMode GetEffectiveTheme()
     {
         try
         {
             var v = Registry.GetValue(
                 @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
                 "AppsUseLightTheme", 1);
-            return v is int i && i == 0 ? ThemeMode.Dark : ThemeMode.Light;
+            return v is int i && i == 0 ? AppThemeMode.Dark : AppThemeMode.Light;
         }
-        catch { return ThemeMode.Light; }
+        catch { return AppThemeMode.Light; }
     }
 }

@@ -16,7 +16,7 @@ public enum FontSizeLevel
 }
 
 /// <summary>Theme mode: follow OS, force light, or force dark. Default light (§3.7, decision 10).</summary>
-public enum ThemeMode
+public enum AppThemeMode
 {
     FollowSystem,
     Light,
@@ -54,7 +54,7 @@ public sealed class AppSettings
     public FontSizeLevel FontSize { get; set; } = FontSizeLevel.Small;
 
     /// <summary>Theme mode; swapped at runtime via <c>App.ApplyTheme</c>. Default light.</summary>
-    public ThemeMode Theme { get; set; } = ThemeMode.Light;
+    public AppThemeMode Theme { get; set; } = AppThemeMode.Light;
 
     // --- Window-size persistence (used by Task 3: borderless resize + DPI robustness) ---
 

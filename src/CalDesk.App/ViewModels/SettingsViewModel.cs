@@ -91,7 +91,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Theme mode (FollowSystem/Light/Dark) mirrored from <see cref="AppSettings.Theme"/>.
     /// Bound to the theme radio group (§3.17); setter applies live via <c>App.ApplyTheme</c> + persists.</summary>
-    [ObservableProperty] private ThemeMode _theme = ThemeMode.Light;
+    [ObservableProperty] private AppThemeMode _theme = AppThemeMode.Light;
 
     public SettingsViewModel(StorageServices store, SettingsService settingsService, ICredentialStore credentials, ICalDavClientFactory factory, SyncRunner sync)
     {
@@ -163,7 +163,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>§3.17: apply theme live (swap Palette dictionary) + persist so the choice
     /// survives restart. FollowSystem is resolved to the OS theme at apply time.</summary>
-    partial void OnThemeChanged(ThemeMode value)
+    partial void OnThemeChanged(AppThemeMode value)
     {
         if (Application.Current is App app)
         {
