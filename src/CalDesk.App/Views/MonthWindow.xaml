@@ -97,8 +97,12 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- Cell is the only month-grid command; preview rows are inert. -->
+                                    <!-- Cell is the only month-grid command; preview rows are inert.
+                                         Stretch content so the fill Border fills the whole grid cell
+                                         (its area depends only on the cell size, never on event count). -->
                                     <Button Style="{StaticResource RowButton}" Margin="1"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch"
                                             Command="{Binding DataContext.SelectDayCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding Date}">
                                         <Border Padding="2,1" CornerRadius="4">
