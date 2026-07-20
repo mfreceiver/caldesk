@@ -68,16 +68,25 @@ public sealed partial class WeekViewModel : ObservableObject, IRecipient<Calenda
     public async Task LoadAsync(int v)
     {
         var tz = TimeZoneInfo.Local;
+        // Capture WeekStart at the entry (before any await) and reuse this snapshot for both the
+        // storage-range bounds AND the BuildWeek call below. If a newer NavigateTo swaps WeekStart
+        // during an await, this load's nav-check fails and aborts without committing — but in the
+        // meantime BuildWeek must not mix "new WeekStart" with "stored events fetched for old
+        // WeekStart" (which the previous late-capture form risked).
+        var weekStart = WeekStart;
         // Local-midnight bounds (not rangeStart.AddDays(7)) so DST weeks are 167/169h, matching BuildWeek.
-        var (rangeStart, rangeEnd) = LocalDateTimeRange.WeekStorageRange(WeekStart, tz);
+        var (rangeStart, rangeEnd) = LocalDateTimeRange.WeekStorageRange(weekStart, tz);
 
         var allCals = await _store.Calendars.GetAllAsync();
         var calMap = allCals.ToDictionary(c => c.Id);
         var selectedIds = allCals.Where(c => c.IsSelected).Select(c => c.Id).ToArray();
         var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
 
+        // T4: capture all BuildWeek inputs on the UI thread, then run the pure compute off-thread.
+        // BuildWeek is pure data (POCO WeekView, no WPF objects, no shared mutable state — T4-C4).
         var today = DateOnly.FromDateTime(DateTime.Today);
-        var built = _viewService.BuildWeek(stored, calMap, WeekStart, tz, today, DateTimeOffset.UtcNow);
+        var nowUtc = DateTimeOffset.UtcNow;
+        var built = await Task.Run(() => _viewService.BuildWeek(stored, calMap, weekStart, tz, today, nowUtc));
         // Only the latest navigation may commit Week; header was already set synchronously in NavigateTo.
         if (v != Volatile.Read(ref _navVersion))
             return;

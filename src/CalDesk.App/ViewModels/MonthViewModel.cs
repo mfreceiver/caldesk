@@ -30,14 +30,22 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
     /// <see cref="SelectDay"/> can rebuild a day's detail without re-querying when the day is inside
     /// the cached expansion's range (T3 reuse). Not cleared at the start of a load — if a newer load
     /// races ahead, the older load's commit is gated by <c>_navVersion</c> and never overwrites this
-    /// field, so stale data cannot leak. Task T5 will add <c>_selectionVersion</c> to also guard
-    /// SelectDay against reading a half-updated cache during a LoadAsync swap.</summary>
+    /// field, so stale data cannot leak. Additionally, <see cref="LoadAsync"/>'s commit block bumps
+    /// <c>_selectionVersion</c> so any in-flight <see cref="SelectDay"/> that captured the PREVIOUS
+    /// cache fails its version check and returns without committing a stale day body.</summary>
     private ExpandedCalendarRange? _currentExpanded;
 
     /// <summary>Half-open <c>[Start, End)</c> bounds of <see cref="_currentExpanded"/>. Zero (default)
     /// when no expansion is cached, in which case <see cref="SelectDay"/> always takes the slow path.</summary>
     private DateOnly _expandedRangeStart;
     private DateOnly _expandedRangeEndExclusive;
+
+    /// <summary>
+    /// Bumped on every <see cref="SelectDay"/> invocation so an in-flight SelectDay from an older
+    /// click cannot overwrite <see cref="SelectedDay"/> after a newer day was clicked. Mirrors the
+    /// <c>_navVersion</c> pattern used by <see cref="LoadAsync"/> (T5 race protection).
+    /// </summary>
+    private int _selectionVersion;
 
     [ObservableProperty]
     private string _monthHeader = string.Empty;
@@ -128,56 +136,78 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
 
         var today = DateOnly.FromDateTime(DateTime.Today);
         var nowUtc = DateTimeOffset.UtcNow;
-        var expanded = _viewService.ExpandRange(stored, calMap, gridStart, gridEndExclusive, tz, nowUtc);
-        var built = _viewService.BuildMonthFromExpanded(expanded, year, monthNumber, today);
-        // Only the latest navigation may commit Month; header was already set synchronously in NavigateTo.
+        // Capture SelectedDate on the UI thread so the background compute below can't race with a
+        // concurrent SelectDay/LoadAsync modifying it.
+        var selectedDate = SelectedDate;
+
+        // T4: move the compute-heavy ExpandRange + BuildMonthFromExpanded + SelectedDay build off the
+        // UI thread into a single Task.Run. CalendarViewService.Build* is pure data (POCOs, no WPF
+        // objects, no shared mutable state — T4-C4) so this is safe. Returns the built MonthView,
+        // the selected day's WeekDay (or null when sel is outside the month grid — T3 fix #1), the
+        // expanded range (for the cache fields below), and the resolved `sel` (for SelectedDate commit).
+        var (built, selDay, expanded, sel) = await Task.Run(() =>
+        {
+            var expanded = _viewService.ExpandRange(stored, calMap, gridStart, gridEndExclusive, tz, nowUtc);
+            var month = _viewService.BuildMonthFromExpanded(expanded, year, monthNumber, today);
+            var sel = selectedDate is { } d && d.Year == year && d.Month == monthNumber ? d : today;
+            // When sel falls inside the month grid, reuse the single expansion for the bottom panel.
+            // When sel falls OUTSIDE the grid (e.g. browsing a far-past month with no SelectedDate →
+            // sel=today, which is outside the viewed month), return null so MonthWindow.xaml's
+            // `SelectedDay == {x:Null}` DataTrigger shows the null-state placeholder (T3 fix #1).
+            WeekDay? selDay = sel >= gridStart && sel < gridEndExclusive
+                ? _viewService.BuildDayFromExpanded(expanded, sel, today, nowUtc)
+                : null;
+            return (month, selDay, expanded, sel);
+        });
+        // Only the latest navigation may commit; header was already set synchronously in NavigateTo.
         if (v != Volatile.Read(ref _navVersion))
             return;
-        Month = built;
 
-        // Cache the expansion so SelectDay can rebuild other days in this month without re-querying.
+        // Bump _selectionVersion to invalidate any in-flight SelectDay continuations (T5 fix):
+        // a SelectDay that captured the PREVIOUS month's _currentExpanded cache would otherwise
+        // commit a stale day body on top of the new month we are about to publish here. After this
+        // bump, those continuations fail their `ver != Volatile.Read(ref _selectionVersion)` check
+        // and return without committing.
+        Interlocked.Increment(ref _selectionVersion);
+
+        // UI-thread commit block: assign observable properties + cache the expansion for SelectDay.
+        Month = built;
         _currentExpanded = expanded;
         _expandedRangeStart = gridStart;
         _expandedRangeEndExclusive = gridEndExclusive;
-
-        // Refresh the selected day inline, gated by nav version so a rapid Prev/Next cannot
-        // leave a stale bottom panel from an older month (the user-click SelectDay command
-        // path stays unconditional). Fall back to today when SelectedDate is in another month.
-        var sel = SelectedDate is { } d && d.Year == year && d.Month == monthNumber ? d : today;
-        if (v != Volatile.Read(ref _navVersion))
-            return;
         SelectedDate = sel;
-        // When sel falls inside the month grid, reuse the single expansion for the bottom panel.
-        // When sel falls OUTSIDE the grid (e.g. browsing a far-past month with no SelectedDate →
-        // sel=today, which is outside the viewed month), set SelectedDay = null so MonthWindow.xaml's
-        // `SelectedDay == {x:Null}` DataTrigger shows the null-state placeholder instead of an empty
-        // day body (T3: this is the intended behaviour change from deleting the 2nd GetInRangeAsync —
-        // bottom panel belongs to the viewed month, not silently to "today").
-        if (sel >= gridStart && sel < gridEndExclusive)
-        {
-            SelectedDay = _viewService.BuildDayFromExpanded(expanded, sel, today, nowUtc);
-        }
-        else
-        {
-            SelectedDay = null;
-        }
+        SelectedDay = selDay;
     }
 
     /// <summary>Selects a single day and builds its detail (all-day + timed) for the bottom panel.
     /// T3: when the day is covered by the cached <see cref="_currentExpanded"/> (the common case —
-    /// user clicks a day in the currently viewed month), rebuild synchronously from the cache with
-    /// no query and no expansion. Otherwise fall back to a 1-day query + BuildDay. Task T5
-    /// will add <c>_selectionVersion</c> race protection; this T3 step is the minimal reuse change.</summary>
+    /// user clicks a day in the currently viewed month), rebuild from the cache with no query and no
+    /// expansion (T5-C2). Otherwise fall back to a 1-day query + BuildDay. T5: every commit is gated
+    /// by <c>_selectionVersion</c> so rapid day-clicks only commit the latest (T5-C1).</summary>
     [RelayCommand]
     private async Task SelectDay(DateOnly date)
     {
+        var ver = Interlocked.Increment(ref _selectionVersion);
         SelectedDate = date;
-        var today = DateOnly.FromDateTime(DateTime.Today);
 
-        // Fast path: the cached expansion covers this day — reuse without re-querying.
-        if (_currentExpanded is not null && date >= _expandedRangeStart && date < _expandedRangeEndExclusive)
+        // Snapshot the cache fields on the UI thread (avoids reading a half-updated cache). This
+        // snapshot alone is not sufficient race protection — LoadAsync's commit block additionally
+        // bumps _selectionVersion so any in-flight SelectDay whose snapshot came from the previous
+        // month fails the post-await version check and returns without committing.
+        var cache = _currentExpanded;
+        var cacheStart = _expandedRangeStart;
+        var cacheEnd = _expandedRangeEndExclusive;
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        // Fast path: cached expansion covers this day — pure compute on background, no query.
+        if (cache is not null && date >= cacheStart && date < cacheEnd)
         {
-            SelectedDay = _viewService.BuildDayFromExpanded(_currentExpanded, date, today, DateTimeOffset.UtcNow);
+            var day = await Task.Run(() =>
+                _viewService.BuildDayFromExpanded(cache, date, today, nowUtc));
+            if (ver != Volatile.Read(ref _selectionVersion))
+                return;
+            SelectedDay = day;
             return;
         }
 
@@ -189,7 +219,10 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
         var calMap = allCals.ToDictionary(c => c.Id);
         var selectedIds = allCals.Where(c => c.IsSelected).Select(c => c.Id).ToArray();
         var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
-        SelectedDay = _viewService.BuildDay(stored, calMap, date, tz, today, DateTimeOffset.UtcNow);
+        var built = await Task.Run(() => _viewService.BuildDay(stored, calMap, date, tz, today, nowUtc));
+        if (ver != Volatile.Read(ref _selectionVersion))
+            return;
+        SelectedDay = built;
     }
 
     [RelayCommand]
