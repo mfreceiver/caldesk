@@ -72,14 +72,11 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
     {
         options ??= MonthViewOptions.Default;
 
-        var first = new DateOnly(year, month, 1);
-        var last = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
-
-        var gridStart = first.AddDays(-DaysSinceMonday(first));
-        // Keep the month surface stable at six complete Monday-Sunday rows. Some months
-        // naturally fit five rows; padding with the following spillover week prevents an
-        // empty UniformGrid row from becoming a large unpainted gap in the app shell.
-        var gridEndExclusive = gridStart.AddDays(42);
+        // Month-grid range is shared with MonthViewModel.LoadAsync via MonthGridRange.For so the
+        // rendered grid (always 6 Mon–Sun rows = 42 cells) and the queried event range always match.
+        var grid = MonthGridRange.For(year, month);
+        var gridStart = grid.Start;
+        var gridEndExclusive = grid.EndExclusive;
 
         // Month grid never hides past (lets users browse history).
         var byDay = BucketByDay(
@@ -153,7 +150,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         var bucket = byDay[date];
         var all = bucket.Where(x => x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
         var timed = bucket.Where(x => !x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
-        var idx = ((int)date.DayOfWeek + 6) % 7;
+        var idx = CalendarDateMath.DaysSinceMonday(date);
         var allEvents = all.Concat(timed).ToList();
         var half = (allEvents.Count + 1) / 2;
         return new WeekDay
@@ -263,10 +260,6 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         if (end.Date == start.Date.AddDays(1)) return $"{startText}→次日{endText}";
         return $"{startText}→{end:MM-dd HH:mm}";
     }
-
-    /// <summary>0 for Monday .. 6 for Sunday.</summary>
-    private static int DaysSinceMonday(DateOnly date)
-        => ((int)date.DayOfWeek + 6) % 7;
 
     private static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
     {

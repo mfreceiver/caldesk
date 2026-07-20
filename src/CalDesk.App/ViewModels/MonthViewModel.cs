@@ -97,12 +97,11 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
         // Capture nav targets before awaits so a concurrent NavigateTo cannot poison this load's build.
         var year = Year;
         var monthNumber = MonthNumber;
-        var first = new DateOnly(year, monthNumber, 1);
-        var last = new DateOnly(year, monthNumber, DateTime.DaysInMonth(year, monthNumber));
 
-        // Fetch across the whole aligned grid so spillover days and recurring series are covered.
-        var gridStart = first.AddDays(-DaysSinceMonday(first));
-        var gridEndExclusive = last.AddDays(-DaysSinceMonday(last)).AddDays(7);
+        // 月视图网格范围统一用 MonthGridRange.For（固定 6 行 42 天），与 CalendarViewService.BuildMonth 共用同一计算。
+        var grid = MonthGridRange.For(year, monthNumber);
+        var gridStart = grid.Start;
+        var gridEndExclusive = grid.EndExclusive;
 
         var rangeStart = LocalMidnightToUtc(gridStart, tz);
         var rangeEnd = LocalMidnightToUtc(gridEndExclusive, tz);
@@ -169,8 +168,6 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
         await _sync.RunAsync();
         await LoadAsync();
     }
-
-    private static int DaysSinceMonday(DateOnly d) => ((int)d.DayOfWeek + 6) % 7;
 
     private static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
     {
