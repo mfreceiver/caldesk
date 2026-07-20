@@ -3,7 +3,7 @@
 > 把这份文件直接喂给你的 VS Code AI 插件（或让它读本文件）。它的工作边界、已知事实、验证步骤都在这里。
 
 ## 0. 你的角色
-你是 CalDesk 项目的 **Windows 端构建/修复助手**。我在 Linux 上完成了全部代码：核心库已测试通过（45/45 单测 + 真机 CalDAV 同步全绿），但 **WPF 桌面外壳 `CalDesk.App` 无法在 Linux 编译，从未编译过**。你的任务是在 Windows 上把它**编译通过 → 修掉编译期/运行期错误 → 发布单文件 EXE → 跑起来冒烟验证**。
+你是 CalDesk 项目的 **Windows 端构建/修复助手**。我在 Linux 上完成了全部代码：核心库已测试通过（离线单测全绿 + 真机 CalDAV 同步全绿），但 **WPF 桌面外壳 `CalDesk.App` 无法在 Linux 编译，从未编译过**。你的任务是在 Windows 上把它**编译通过 → 修掉编译期/运行期错误 → 发布单文件 EXE → 跑起来冒烟验证**。
 
 ## 1. 立即目标（按序）
 1. `git pull`，HEAD 应为 `20487df` 或更新。
@@ -20,7 +20,7 @@
 - 关键 NuGet：CommunityToolkit.Mvvm 8.4.0、H.NotifyIcon.Wpf 2.2.0、Ical.Net 5.2.3、Microsoft.Data.Sqlite + SQLitePCLRaw。
 
 ## 3. 不可违反的约束
-1. **不要改动核心库**（`src/CalDesk.Core | CalDav | Storage`）。它们在 Linux 上 0 错构建、45/45 单测 + 真机同步全绿，是稳的。修编译错误**只在 `src/CalDesk.App/**` 和 `tests/CalDesk.Tests/**` 内**进行。若某编译错误的根因在库的公共 API → **停下告诉我**，不要擅自改库。
+1. **不要改动核心库**（`src/CalDesk.Core | CalDav | Storage`）。它们在 Linux 上 0 错构建、离线单测全绿 + 真机同步全绿，是稳的。修编译错误**只在 `src/CalDesk.App/**` 和 `tests/CalDesk.Tests/**` 内**进行。若某编译错误的根因在库的公共 API → **停下告诉我**，不要擅自改库。
 2. **不要回退以下已确认的修复**：
    - H.NotifyIcon.Wpf 2.2.0：xmlns 用 `clr-namespace:H.NotifyIcon;assembly=H.NotifyIcon.Wpf`。托盘 `IconSource` 现在绑定应用 logo（`<BitmapImage UriSource="pack://application:,,,/Assets/app.ico"/>`，由 `misc/icon.svg` 生成），**不是** `GeneratedIcon`/`GeneratedIconSource`，别改回文本生成图标。EXE/窗口图标靠 `<ApplicationIcon>Assets\app.ico</ApplicationIcon>`（多分辨率 16/32/48/256，已含）。`Assets\app.ico` 和 `Assets\icon.png` 都是 `<Resource>`。
    - `Win32` 与 `WindowsCredentialStore` 的类**必须是 `partial`**（`LibraryImport` 源生器要求），别去掉。

@@ -14,11 +14,11 @@ cd <your clone path>
 git pull
 dotnet restore CalDesk.slnx
 dotnet build CalDesk.slnx -c Debug -nologo      # 目标：0 error / 0 warning
-dotnet test tests/CalDesk.Tests --nologo        # 目标：45/45 通过
+dotnet test tests/CalDesk.Tests --nologo        # 目标：全部通过
 ```
 - 解决方案是 **`CalDesk.slnx`**（不是 `.sln`）。
 - 需要 **Windows** 才能编译（`CalDesk.App` 是 WPF，`net10.0-windows`）。
-- 发布单文件 EXE：`powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version 0.1.0`（产物 → `release\CalDesk.exe`，~29 MB，framework-dependent）。
+- 发布单文件 EXE：`powershell -ExecutionPolicy Bypass -File scripts\publish.ps1`（dev/试用构建，版本自动带 commit 锚点）；里程碑发版先在 Linux 跑 `./scripts/release.sh <patch|minor|major>` 打 tag 并 push，再用 `publish.ps1 -Version <tag>` 出干净版本号。产物 → `release\CalDesk.exe`（~29 MB，framework-dependent）。
 
 ## 三、Windows 构建适配（已提交，`git pull` 后即编即测）
 > 让上游（Linux 编写）的代码在 Windows 上通过编译/测试所需的改动，**全部位于 `src/CalDesk.App/**` 与 `tests/**`，未改核心库**。已在 `131ebeb` 提交回远端，无需手工补。
@@ -29,7 +29,7 @@ dotnet test tests/CalDesk.Tests --nologo        # 目标：45/45 通过
 4. **`src/CalDesk.App/App.xaml.cs`** → 月/周窗口三元真分支强制 `(Window?)`（`MonthWindow` 与 `WeekWindow` 间无隐式转换）。
 5. **`tests/CalDesk.Tests/StorageRepositoryTests.cs`** → `CleanupDb` 增加 `SqliteConnection.ClearAllPools()` + 删除重试（Windows 上连接池锁住 temp `.db`，导致 teardown 删文件报“文件被占用”）。
 
-> ✅ **已验证**：`131ebeb` 在 Windows 构建机上 `dotnet build CalDesk.slnx` = **0 错误 / 0 警告**；`dotnet test` = **45/45 通过**。第二节“拉取即编译即测”成立。
+> ✅ **已验证**：`131ebeb` 在 Windows 构建机上 `dotnet build CalDesk.slnx` = **0 错误 / 0 警告**；`dotnet test` = **全部通过**。第二节“拉取即编译即测”成立。
 
 ## 四、在 Kilo 新会话里如何使用
 在新会话直接发送（任选其一）：
@@ -38,7 +38,7 @@ dotnet test tests/CalDesk.Tests --nologo        # 目标：45/45 通过
 - 或更简：
   > 执行 `docs/WINDOWS-BUILD.md` 的第二节流程。
 
-预期结果：`dotnet build` 0 error；`dotnet test` 45/45 通过。
+预期结果：`dotnet build` 0 error；`dotnet test` 全部通过。
 
 ## 五、常见问题
 - **`找不到 SDK / net10.0`**：本机未装 .NET 10 SDK。安装：`winget install Microsoft.DotNet.SDK.10`。

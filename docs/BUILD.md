@@ -7,7 +7,7 @@
 - **.NET 10 SDK**（构建用）
 - Git（克隆 `https://github.com/mfreceiver/caldesk.git`）
 
-> WPF 只能在 Windows 上编译；Core / CalDav / Storage / Tests 已在 Linux 验证（9 项单测全部通过，含对 Radicale 的实时端到端同步测试）。
+> WPF 只能在 Windows 上编译；Core / CalDav / Storage / Tests 在 Linux 验证（离线单测全绿，含对 Radicale 的实时端到端同步测试；当前用例数见 `dotnet test tests/CalDesk.Tests` 输出，随版本增长）。
 
 ## 二、目标机要求（运行）
 - **.NET 10 Desktop Runtime**（已确认你的机器有）
@@ -22,15 +22,21 @@ cd caldesk
 dotnet test tests/CalDesk.Tests
 
 # 发布：framework-dependent 单文件 EXE（产物 -> release\CalDesk.exe）
-powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version 0.1.0
+# ① dev/试用构建（默认）：不带 -Version → 版本号自动 = git describe（带 commit 锚点，可追溯、可覆盖升级）
+powershell -ExecutionPolicy Bypass -File scripts\publish.ps1
+# ② 里程碑发版：先在 Linux 跑 ./scripts/release.sh <patch|minor|major> 打 tag 并 push，再用 -Version <tag> 出干净版本号
+powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version <tag>
 # 见 scripts/publish.ps1（single-file + 去 pdb；release/ 已 gitignore）
 ```
 
-产物在：
-```
-src/CalDesk.App/bin/Release/<tfm>/win-x64/publish/CalDesk.exe
-```
-该目录整体拷贝即「便携版」（含 CalDesk.exe 与必要的本地依赖；运行需目标机已装 .NET 10 桌面运行时）。
+产物在 `<repo>\release\CalDesk.exe`（~29 MB，single-file、去 pdb、framework-dependent；`release/` 已 gitignore）。运行需目标机已装 **.NET 10 桌面运行时**。
+
+### 三.1 版本号机制（git 派生，单一权威）
+- 版本号**不写在任何文件里**，构建期由 `Directory.Version.props` 从 git 派生：`InformationalVersion = git describe --tags --always --dirty`（「关于」对话框显示），`FileVersion = <major>.<minor>.<patch>.<提交数>`（第 4 段 = `git rev-list --count HEAD`，单调递增）。
+- **里程碑发版（bump semver）**：Linux 上 `./scripts/release.sh <patch|minor|major>` → `dotnet test` 门禁 → 生成 changelog → 打 annotated tag → `git push origin main <tag>` → Windows 上 `publish.ps1 -Version <tag>` 出干净版本号 EXE。
+- **同族小修 / 试用构建**：直接 `git commit` → `publish.ps1`（**不带** `-Version`）→ EXE 自带 `<tag>-<hash>`、`FileVersion` 更高，可追溯、可覆盖升级、无需新 tag。
+- ⚠ `-Version` 只在里程碑发版配合真实 tag 用；dev/试用构建一律省略，让版本自动带 commit 锚点。
+- 细节见 [`VERSIONING.md`](./VERSIONING.md)；发版/推送流程见 [`RELEASING.md`](./RELEASING.md)。
 
 ## 四、首次运行配置
 1. 启动 `CalDesk.exe`（首次窗口为空属正常，尚未连接账户）。

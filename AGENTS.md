@@ -29,7 +29,7 @@ export PATH="$DOTNET_ROOT:$PATH"
 dotnet build CalDesk.slnx -c Debug          # Core/CalDav/Storage/Tests 编过；App(WPF) 在 Linux 编不了
 dotnet test tests/CalDesk.Tests --nologo    # 离线单测全绿；live 集成测试需 CALDAV_TEST_* env（见 .env.example）
 ```
-> ⚠ **不要**改核心库（Core/CalDav/Storage）除非必要——它们已 45/45 单测 + 真机同步验证过。改了要重跑测试。
+> ⚠ **不要**改核心库（Core/CalDav/Storage）除非必要——它们已 离线单测全绿 + 真机同步验证过。改了要重跑测试。
 
 ### Windows（WPF 编译 + 发布）
 **首选：远程构建机**（见 `docs/REMOTE-BUILD.md`）：
@@ -38,9 +38,12 @@ ssh winbuild 'cd C:\Dev_Code\caldesk && git -c credential.helper= pull && dotnet
 ```
 发布单文件 EXE（产物到 `<repo>\release\CalDesk.exe`）：
 ```bash
-ssh winbuild 'cd C:\Dev_Code\caldesk && powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version 0.1.0'
+# dev/试用构建（默认，版本自动带 commit 锚点，可追溯、可覆盖升级）
+ssh winbuild 'cd C:\Dev_Code\caldesk && powershell -ExecutionPolicy Bypass -File scripts\publish.ps1'
+# 里程碑发版（先在 Linux ./scripts/release.sh <patch|minor|major> 打 tag 并 git push 后）
+ssh winbuild 'cd C:\Dev_Code\caldesk && powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version <tag>'
 ```
-> `scripts/publish.ps1`（single-file、去 pdb、framework-dependent）；`release/` 已 gitignore。
+> `scripts/publish.ps1`（single-file、去 pdb、framework-dependent）；`release/` 已 gitignore。`-Version` 仅里程碑发版用、配合 `release.sh` 打的真实 tag；其余一律省略。
 
 ## 版本号（git 派生，禁止手写）
 版本**不写在任何文件里**，由 `Directory.Version.props` 在构建期从 git 派生：
