@@ -60,6 +60,10 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
     /// The grid is aligned to Mon–Sun weeks and includes spillover days from neighbouring months
     /// (marked <see cref="MonthDay.IsInMonth"/>=false). Past occurrences are NOT hidden, so
     /// navigating to previous months keeps their cells populated.</summary>
+    /// <remarks>Behaviour-preserving delegate (T3): composes <see cref="ExpandRange"/> +
+    /// <see cref="BuildMonthFromExpanded"/> so the legacy signature stays available for existing
+    /// tests and call sites. New code should prefer <see cref="ExpandRange"/> once +
+    /// <see cref="BuildMonthFromExpanded"/> reuse to avoid the duplicate query+expand.</remarks>
     public MonthView BuildMonth(
         IEnumerable<CalendarEvent> events,
         IReadOnlyDictionary<Guid, CalendarInfo> calendars,
@@ -71,17 +75,49 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         MonthViewOptions? options = null)
     {
         options ??= MonthViewOptions.Default;
+        var grid = MonthGridRange.For(year, month);
+        var range = ExpandRange(events, calendars, grid.Start, grid.EndExclusive, displayTz, nowUtc);
+        return BuildMonthFromExpanded(range, year, month, today, options);
+    }
 
-        // Month-grid range is shared with MonthViewModel.LoadAsync via MonthGridRange.For so the
-        // rendered grid (always 6 Mon–Sun rows = 42 cells) and the queried event range always match.
+    /// <summary>Expand every event in the half-open <c>[<paramref name="rangeStart"/>,
+    /// <paramref name="rangeEndExclusive"/>)</c> interval ONCE and bucket occurrences by their
+    /// local-day start, returning a reusable <see cref="ExpandedCalendarRange"/> that
+    /// <see cref="BuildMonthFromExpanded"/> and <see cref="BuildDayFromExpanded"/> read from without
+    /// re-running the expander. Past occurrences are NOT hidden (matches the legacy BuildMonth/BuildDay
+    /// semantics).</summary>
+    public ExpandedCalendarRange ExpandRange(
+        IEnumerable<CalendarEvent> events,
+        IReadOnlyDictionary<Guid, CalendarInfo> calendars,
+        DateOnly rangeStart,
+        DateOnly rangeEndExclusive,
+        TimeZoneInfo displayTz,
+        DateTimeOffset nowUtc)
+    {
+        var byDay = BucketByDay(
+            events, calendars, rangeStart, rangeEndExclusive,
+            displayTz, nowUtc, hideFullyPastBefore: null);
+        return new ExpandedCalendarRange(byDay);
+    }
+
+    /// <summary>Build a month-grid view from a pre-expanded <paramref name="range"/> (T3). Reads
+    /// only from <see cref="ExpandedCalendarRange.GetDay"/>; does <em>not</em> re-run the expander.
+    /// <para>The <paramref name="range"/> must cover at least <c>[MonthGridRange.For(year, month).Start,
+    /// .EndExclusive)</c> — typically obtained from <see cref="ExpandRange"/> called with those
+    /// exact bounds in <c>MonthViewModel.LoadAsync</c>.</para></summary>
+    /// <param name="options">Reserved; defaults to <see cref="MonthViewOptions.Default"/> (currently
+    /// unused, kept for parity with <see cref="BuildMonth"/>).</param>
+    public MonthView BuildMonthFromExpanded(
+        ExpandedCalendarRange range,
+        int year,
+        int month,
+        DateOnly today,
+        MonthViewOptions? options = null)
+    {
+        options ??= MonthViewOptions.Default;
         var grid = MonthGridRange.For(year, month);
         var gridStart = grid.Start;
         var gridEndExclusive = grid.EndExclusive;
-
-        // Month grid never hides past (lets users browse history).
-        var byDay = BucketByDay(
-            events, calendars, gridStart, gridEndExclusive,
-            displayTz, nowUtc, hideFullyPastBefore: null);
 
         var weeks = new List<MonthWeek>();
         for (var w = gridStart; w < gridEndExclusive; w = w.AddDays(7))
@@ -90,7 +126,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             for (var i = 0; i < 7; i++)
             {
                 var date = w.AddDays(i);
-                var bucket = byDay.TryGetValue(date, out var b) ? b : new List<OccurrenceItem>();
+                var bucket = range.GetDay(date);
 
                 var ordered = bucket
                     .OrderByDescending(x => x.IsAllDay) // all-day first
@@ -137,7 +173,9 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         };
     }
 
-    /// <summary>Build a single-day detail (all-day + timed) for the month-view bottom panel.</summary>
+    /// <summary>Build a single-day detail (all-day + timed) for the month-view bottom panel.
+    /// Behaviour-preserving delegate (T3): composes <see cref="ExpandRange"/> over a 1-day range +
+    /// <see cref="BuildDayFromExpanded"/>.</summary>
     public WeekDay BuildDay(
         IEnumerable<CalendarEvent> events,
         IReadOnlyDictionary<Guid, CalendarInfo> calendars,
@@ -146,8 +184,23 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         DateOnly today,
         DateTimeOffset nowUtc)
     {
-        var byDay = BucketByDay(events, calendars, date, date.AddDays(1), displayTz, nowUtc, hideFullyPastBefore: null);
-        var bucket = byDay[date];
+        var range = ExpandRange(events, calendars, date, date.AddDays(1), displayTz, nowUtc);
+        return BuildDayFromExpanded(range, date, today, nowUtc);
+    }
+
+    /// <summary>Build a single-day detail from a pre-expanded <paramref name="range"/> (T3). Reads
+    /// only from <see cref="ExpandedCalendarRange.GetDay"/>; does <em>not</em> re-run the expander.
+    /// <para><paramref name="nowUtc"/> is kept in the signature for parity with
+    /// <see cref="BuildDay"/>; it is unused here because <see cref="OccurrenceItem.IsOngoing"/> was
+    /// already baked into each item during <see cref="ExpandRange"/>.</para></summary>
+    public WeekDay BuildDayFromExpanded(
+        ExpandedCalendarRange range,
+        DateOnly date,
+        DateOnly today,
+        DateTimeOffset nowUtc)
+    {
+        _ = nowUtc; // parity-only; ongoing state is already baked into range items (see XML doc).
+        var bucket = range.GetDay(date);
         var all = bucket.Where(x => x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
         var timed = bucket.Where(x => !x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
         var idx = CalendarDateMath.DaysSinceMonday(date);
@@ -158,6 +211,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             Date = date,
             Header = $"{WeekdayNames[idx]} {date.Day}",
             IsToday = date == today,
+            IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
             AllDay = all,
             Timed = timed,
             AllEvents = allEvents,
@@ -179,10 +233,10 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         DateTimeOffset nowUtc,
         DateOnly? hideFullyPastBefore)
     {
-        var rangeStartUtc = LocalMidnightToUtc(rangeStart, displayTz);
-        var rangeEndUtc = LocalMidnightToUtc(rangeEndExclusive, displayTz);
+        var rangeStartUtc = CalendarDateMath.LocalMidnightToUtc(rangeStart, displayTz);
+        var rangeEndUtc = CalendarDateMath.LocalMidnightToUtc(rangeEndExclusive, displayTz);
         var pastCutoffUtc = hideFullyPastBefore is { } hide
-            ? LocalMidnightToUtc(hide, displayTz)
+            ? CalendarDateMath.LocalMidnightToUtc(hide, displayTz)
             : DateTimeOffset.MinValue;
 
         var byDay = new Dictionary<DateOnly, List<OccurrenceItem>>();
@@ -259,11 +313,5 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         if (start.Date == end.Date) return $"{startText}-{endText}";
         if (end.Date == start.Date.AddDays(1)) return $"{startText}→次日{endText}";
         return $"{startText}→{end:MM-dd HH:mm}";
-    }
-
-    private static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
-    {
-        var local = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, tz.GetUtcOffset(local)).UtcDateTime;
     }
 }

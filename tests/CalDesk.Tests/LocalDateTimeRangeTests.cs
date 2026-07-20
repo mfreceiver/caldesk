@@ -29,9 +29,9 @@ public sealed class LocalDateTimeRangeTests
 
         Assert.Equal(TimeSpan.FromHours(169), rangeEnd - rangeStart);
         Assert.NotEqual(TimeSpan.FromDays(7), rangeEnd - rangeStart);
-        // Both bounds are local midnights converted independently.
-        Assert.Equal(LocalDateTimeRange.LocalMidnightToUtc(weekStart, tz), rangeStart);
-        Assert.Equal(LocalDateTimeRange.LocalMidnightToUtc(weekStart.AddDays(7), tz), rangeEnd);
+        // Both bounds are local midnights converted independently via the shared DST-safe helper.
+        Assert.Equal(CalendarDateMath.LocalMidnightToUtc(weekStart, tz), rangeStart);
+        Assert.Equal(CalendarDateMath.LocalMidnightToUtc(weekStart.AddDays(7), tz), rangeEnd);
     }
 
     [Fact]

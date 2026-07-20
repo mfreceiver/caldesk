@@ -8,15 +8,6 @@ namespace CalDesk.Core.Services;
 public static class LocalDateTimeRange
 {
     /// <summary>
-    /// UTC instant of local midnight for <paramref name="date"/> in <paramref name="tz"/>.
-    /// </summary>
-    public static DateTimeOffset LocalMidnightToUtc(DateOnly date, TimeZoneInfo tz)
-    {
-        var local = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
-        return new DateTimeOffset(local, tz.GetUtcOffset(local)).UtcDateTime;
-    }
-
-    /// <summary>
     /// Half-open storage query window for a week starting at local midnight of
     /// <paramref name="weekStart"/> through local midnight of <c>weekStart + 7 days</c>.
     /// Matches <see cref="CalendarViewService.BuildWeek"/> day boundaries under DST.
@@ -25,9 +16,11 @@ public static class LocalDateTimeRange
         DateOnly weekStart,
         TimeZoneInfo tz)
     {
-        var rangeStart = LocalMidnightToUtc(weekStart, tz);
-        // Local midnight of weekStart+7 — not rangeStart.AddDays(7) (always 168h; wrong across DST).
-        var rangeEnd = LocalMidnightToUtc(weekStart.AddDays(7), tz);
+        // Delegate to CalendarDateMath.LocalMidnightToUtc so there is a single DST-safe
+        // definition in the codebase (T2-C2). Each bound is converted independently so a
+        // spring-forward week = 167h and a fall-back week = 169h (never a fixed 168h span).
+        var rangeStart = CalendarDateMath.LocalMidnightToUtc(weekStart, tz);
+        var rangeEnd = CalendarDateMath.LocalMidnightToUtc(weekStart.AddDays(7), tz);
         return (rangeStart, rangeEnd);
     }
 }
