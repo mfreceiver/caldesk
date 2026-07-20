@@ -105,6 +105,8 @@ public sealed class StorageRepositoryTests
             => throw new NotSupportedException();
         public Task<PendingSyncCounts> GetPendingCountsAsync(CancellationToken ct = default)
             => throw new NotSupportedException();
+        public Task ClearAllAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
     }
 
     // ---- 0. original end-to-end round trip -----------------------------------

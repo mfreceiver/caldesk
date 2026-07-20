@@ -289,6 +289,7 @@ public sealed class SyncEngineUnitTests
         }
 
         public Task DeleteAsync(Guid id, CancellationToken ct = default) { _store.Remove(id); return Task.CompletedTask; }
+        public Task ClearAllSyncTokensAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class FakeEventRepo : IEventRepository
@@ -312,6 +313,7 @@ public sealed class SyncEngineUnitTests
         public Task UpsertAsync(CalendarEvent evt, CancellationToken ct = default) { _byId[evt.Id] = evt; return Task.CompletedTask; }
         public Task MarkDeletedAsync(Guid id, CancellationToken ct = default) { if (_byId.TryGetValue(id, out var e)) e.SyncStatus = SyncStatus.DeletedLocal; return Task.CompletedTask; }
         public Task HardDeleteAsync(Guid id, CancellationToken ct = default) { _byId.Remove(id); return Task.CompletedTask; }
+        public Task HardDeleteAllAsync(CancellationToken ct = default) { _byId.Clear(); return Task.CompletedTask; }
     }
 
     private sealed class FakeSyncStateRepo : ISyncStateRepository
@@ -324,6 +326,7 @@ public sealed class SyncEngineUnitTests
         public Task SaveCtagAsync(Guid calendarId, string? ctag, CancellationToken ct = default) { _ctags[calendarId] = ctag; return Task.CompletedTask; }
         public Task<string?> GetCtagAsync(Guid calendarId, CancellationToken ct = default)
             => Task.FromResult(_ctags.TryGetValue(calendarId, out var c) ? c : null);
+        public Task ClearAllAsync(CancellationToken ct = default) { _tokens.Clear(); _ctags.Clear(); return Task.CompletedTask; }
     }
 
     private sealed class FakeOpRepo : ISyncOperationRepository
@@ -350,5 +353,6 @@ public sealed class SyncEngineUnitTests
             var delete = _ops.Count(o => o.Kind == SyncOperationKind.Delete);
             return Task.FromResult(new PendingSyncCounts(create, update, delete));
         }
+        public Task ClearAllAsync(CancellationToken ct = default) { _ops.Clear(); return Task.CompletedTask; }
     }
 }

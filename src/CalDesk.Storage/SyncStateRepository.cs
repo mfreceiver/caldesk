@@ -60,4 +60,12 @@ internal sealed class SyncStateRepository : ISyncStateRepository
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null or DBNull ? null : (string)result;
     }
+
+    public async Task ClearAllAsync(CancellationToken ct = default)
+    {
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+        cmd.CommandText = "DELETE FROM sync_state";
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

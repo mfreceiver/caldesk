@@ -205,6 +205,14 @@ internal sealed class EventRepository : IEventRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task HardDeleteAllAsync(CancellationToken ct = default)
+    {
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+        cmd.CommandText = "DELETE FROM events";
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static CalendarEvent Map(SqliteDataReader r) => new()
     {
         Id = DbConvert.ToGuid(r["id"]),

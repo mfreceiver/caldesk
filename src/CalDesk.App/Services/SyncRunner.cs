@@ -247,6 +247,18 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Wipe all local events and sync state (keeps account configuration and calendar
+    /// colors), then trigger a full re-pull. This recovers from one-time conversion bugs such
+    /// as historical TZID values that were stored before the conversion fix.</summary>
+    public async Task FullResyncAsync(CancellationToken ct = default)
+    {
+        await _store.Events.HardDeleteAllAsync(ct).ConfigureAwait(false);
+        await _store.Calendars.ClearAllSyncTokensAsync(ct).ConfigureAwait(false);
+        await _store.SyncState.ClearAllAsync(ct).ConfigureAwait(false);
+        await _store.SyncOperations.ClearAllAsync(ct).ConfigureAwait(false);
+        await RunAsync().ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         _timer?.Dispose();

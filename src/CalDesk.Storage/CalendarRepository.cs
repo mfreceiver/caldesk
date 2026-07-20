@@ -129,6 +129,20 @@ internal sealed class CalendarRepository : ICalendarRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task ClearAllSyncTokensAsync(CancellationToken ct = default)
+    {
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+        cmd.CommandText = """
+            UPDATE calendars
+            SET sync_token = NULL,
+                ctag = NULL,
+                updated_at = @updated_at
+            """;
+        cmd.Parameters.AddWithValue("@updated_at", DbConvert.ToTimestamp(DateTimeOffset.UtcNow));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static CalendarInfo Map(SqliteDataReader r) => new()
     {
         Id = DbConvert.ToGuid(r["id"]),

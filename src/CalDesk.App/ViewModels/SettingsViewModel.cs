@@ -59,7 +59,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _defaultReminderMinutes = 15;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSaveAccount), nameof(CanTestConnection))]
+    [NotifyPropertyChangedFor(nameof(CanSaveAccount), nameof(CanTestConnection), nameof(CanFullResync))]
     private bool _isBusy;
 
     [ObservableProperty] private string _statusText = string.Empty;
@@ -69,6 +69,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool CanSaveAccount => !IsBusy;
     public bool CanTestConnection => !IsBusy;
+    public bool CanFullResync => !IsBusy;
 
     /// <summary>Calendars discovered on the server (populated after connect). Empty until connected.</summary>
     [ObservableProperty]
@@ -335,6 +336,38 @@ public sealed partial class SettingsViewModel : ObservableObject
             // Refresh open week/month windows (local color/selection only — no server sync).
             WeakReferenceMessenger.Default.Send(new CalendarColorsChangedMessage());
             RequestClose?.Invoke();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanFullResync))]
+    private async Task FullResyncAsync()
+    {
+        if (IsBusy) return;
+
+        var result = MessageBox.Show(
+            "将清除本机所有事件并从服务器全量重新拉取。\n\n" +
+            "· 保留：CalDAV 账户、日历颜色与显隐设置\n" +
+            "· 清除：所有本地事件、同步状态、未推送的本地改动\n\n" +
+            "此操作不可撤销，完成后会自动开始同步。是否继续？",
+            "全量重新同步", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        IsBusy = true;
+        StatusText = "正在清除并重新同步…";
+        try
+        {
+            await _sync.FullResyncAsync();
+            await RefreshCalendarsAsync();
+            StatusText = "已清除并开始全量同步";
+        }
+        catch (Exception ex)
+        {
+            StatusText = "全量同步失败：" + ex.Message;
+            Error?.Invoke(ex.Message);
         }
         finally
         {

@@ -186,6 +186,14 @@ internal sealed class SyncOperationRepository : ISyncOperationRepository
         return new PendingSyncCounts(create, update, delete);
     }
 
+    public async Task ClearAllAsync(CancellationToken ct = default)
+    {
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+        cmd.CommandText = "DELETE FROM sync_operations";
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static SyncOperation Map(SqliteDataReader r) => new()
     {
         Id = DbConvert.ToLong(r["id"]),

@@ -10,6 +10,32 @@ public sealed class IcalMapperTests
     private const string VCalendarHead = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n";
     private const string VCalendarTail = "END:VCALENDAR\r\n";
 
+    [Fact]
+    public void Tzid_DtStart_Converts_WallClock_To_Real_Utc()
+    {
+        var ics = VCalendarHead +
+                  "BEGIN:VTIMEZONE\r\n" +
+                  "TZID:Asia/Shanghai\r\n" +
+                  "BEGIN:STANDARD\r\n" +
+                  "DTSTART:19700101T000000\r\n" +
+                  "TZOFFSETFROM:+0800\r\n" +
+                  "TZOFFSETTO:+0800\r\n" +
+                  "END:STANDARD\r\n" +
+                  "END:VTIMEZONE\r\n" +
+                  "BEGIN:VEVENT\r\n" +
+                  "UID:tz-1\r\n" +
+                  "DTSTART;TZID=Asia/Shanghai:20260715T080000\r\n" +
+                  "DTEND;TZID=Asia/Shanghai:20260715T090000\r\n" +
+                  "SUMMARY:Shanghai 8am\r\n" +
+                  "END:VEVENT\r\n" +
+                  VCalendarTail;
+
+        var evt = Assert.Single(IcalMapper.ToCalendarEvents(ics, Guid.NewGuid(), null, null));
+
+        Assert.Equal(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero), evt.StartUtc);
+        Assert.Equal(new DateTimeOffset(2026, 7, 15, 1, 0, 0, TimeSpan.Zero), evt.EndUtc);
+    }
+
     // ---- Issue 4: DURATION fallback ----------------------------------------
 
     [Fact]

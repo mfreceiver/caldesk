@@ -109,13 +109,14 @@ public static class IcalMapper
             return DateTime.SpecifyKind(dt.AsUtc, DateTimeKind.Utc);
         }
 
-        // TZID present → AsUtc may not actually convert (just relabels wall-clock as UTC).
-        // Rebuild the civil DateTime from the correct time-of-day components and convert
-        // via .NET TimeZoneInfo (accepts both IANA and Windows TZIDs on .NET 6+).
-        var civil = new DateTime(
-            dt.Year, dt.Month, dt.Day,
-            dt.AsUtc.Hour, dt.AsUtc.Minute, dt.AsUtc.Second,
-            DateTimeKind.Unspecified);
+        // TZID present → take the RAW wall-clock value (dt.Value), NOT dt.AsUtc. Ical.Net's
+        // AsUtc conversion is unreliable across runtimes: on some it converts properly, on
+        // others it just relabels the wall-clock value as UTC. Deriving the time-of-day from
+        // AsUtc therefore risks double conversion when AsUtc does convert (08:00 Shanghai →
+        // AsUtc gives 00:00 → we'd convert that again → 16:00 the prior day). dt.Value is the
+        // literal parsed civil DateTime regardless of platform. Convert exactly once via .NET
+        // TimeZoneInfo (accepts both IANA and Windows TZIDs on .NET 6+).
+        var civil = DateTime.SpecifyKind(dt.Value, DateTimeKind.Unspecified);
 
         try
         {

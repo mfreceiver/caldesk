@@ -20,6 +20,7 @@ public interface ICalendarRepository
     Task<CalendarInfo?> FindByRemoteUrlAsync(string remoteUrl, CancellationToken ct = default);
     Task UpsertAsync(CalendarInfo calendar, CancellationToken ct = default);
     Task DeleteAsync(Guid id, CancellationToken ct = default);
+    Task ClearAllSyncTokensAsync(CancellationToken ct = default);
 }
 
 public interface IEventRepository
@@ -41,6 +42,7 @@ public interface IEventRepository
     Task UpsertAsync(CalendarEvent evt, CancellationToken ct = default);
     Task MarkDeletedAsync(Guid id, CancellationToken ct = default);
     Task HardDeleteAsync(Guid id, CancellationToken ct = default);
+    Task HardDeleteAllAsync(CancellationToken ct = default);
 }
 
 public interface ISyncStateRepository
@@ -49,6 +51,7 @@ public interface ISyncStateRepository
     Task<string?> GetSyncTokenAsync(Guid calendarId, CancellationToken ct = default);
     Task SaveCtagAsync(Guid calendarId, string? ctag, CancellationToken ct = default);
     Task<string?> GetCtagAsync(Guid calendarId, CancellationToken ct = default);
+    Task ClearAllAsync(CancellationToken ct = default);
 }
 
 public interface ISyncOperationRepository
@@ -60,4 +63,5 @@ public interface ISyncOperationRepository
 
     /// <summary>Counts of pending outbox rows grouped by operation kind (Create/Update/Delete).</summary>
     Task<PendingSyncCounts> GetPendingCountsAsync(CancellationToken ct = default);
+    Task ClearAllAsync(CancellationToken ct = default);
 }
