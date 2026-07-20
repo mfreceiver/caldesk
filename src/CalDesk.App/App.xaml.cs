@@ -80,7 +80,9 @@ public partial class App : Application
         _creds = new WindowsCredentialStore();
         StartupLog.Log("OnStartup: WindowsCredentialStore created");
         _factory = new CalDavClientFactory(_creds, () => _settingsSvc.Current.AcceptInsecureTls);
-        _viewSvc = new CalendarViewService(new IcalRecurrenceExpander());
+        // Shared parse cache for view + reminder expanders (T6); both must share one instance.
+        var recurringCache = new RecurringEventCache();
+        _viewSvc = new CalendarViewService(new IcalRecurrenceExpander(recurringCache));
         _events = new EventService(_store.Events, _store.SyncOperations);
         StartupLog.Log("OnStartup: core services built");
 
@@ -96,7 +98,7 @@ public partial class App : Application
         _sync.Start();
         StartupLog.Log("OnStartup: SyncRunner started (first sync ~T+3s)");
 
-        _reminders = new ReminderService(_store, new IcalRecurrenceExpander(), () => _settingsSvc.Current, OnReminder);
+        _reminders = new ReminderService(_store, new IcalRecurrenceExpander(recurringCache), () => _settingsSvc.Current, OnReminder);
         StartupLog.Log("OnStartup: ReminderService created");
 
         _vm = new WeekViewModel(_store, _viewSvc, _events, _sync,

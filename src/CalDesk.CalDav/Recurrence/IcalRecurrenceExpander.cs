@@ -20,6 +20,24 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
     /// walk back unboundedly for pathological inputs.</summary>
     private static readonly TimeSpan MaxLookback = TimeSpan.FromDays(366);
 
+    // G4: Ical.Net 5.2.3 GetOccurrences/Evaluator is not documented as thread-safe.
+    // EventEvaluator is created once per CalendarEvent and Evaluate streams mutable state;
+    // when the same ParsedCalendar is shared across UI + ReminderService threads we serialize
+    // GetOccurrences on a process-wide lock (simpler than per-calendar locks; expand is cheap
+    // relative to parse which is what the cache avoids).
+    private static readonly object ExpandLock = new();
+
+    private readonly IRecurringEventCache? _cache;
+
+    /// <summary>
+    /// <paramref name="cache"/> may be null (no-cache path) so existing unit tests that use the
+    /// parameterless construction continue to work without injection.
+    /// </summary>
+    public IcalRecurrenceExpander(IRecurringEventCache? cache = null)
+    {
+        _cache = cache;
+    }
+
     public IEnumerable<EventOccurrence> Expand(CalendarEvent evt, CalendarInfo calendar, DateTimeOffset rangeStart, DateTimeOffset rangeEnd)
     {
         if (!evt.IsRecurring)
@@ -42,18 +60,35 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
             yield break;
         }
 
-        Ical.Net.Calendar cal;
-        try
+        IcalEvent? ve;
+        if (_cache is not null)
         {
-            cal = Ical.Net.Calendar.Load(new StringReader(evt.ICalendarData));
+            // Cached null = prior parse failure (negative cache) → skip.
+            var parsed = _cache.GetOrParse(evt.Id, evt.ETag, evt.UpdatedAt, evt.ICalendarData);
+            if (parsed is null)
+            {
+                yield break;
+            }
+
+            ve = parsed.Calendar.Events.FirstOrDefault(e => string.Equals(e.Uid, evt.Uid, StringComparison.Ordinal))
+                 ?? parsed.Calendar.Events.FirstOrDefault();
         }
-        catch
+        else
         {
-            yield break;
+            Ical.Net.Calendar cal;
+            try
+            {
+                cal = Ical.Net.Calendar.Load(new StringReader(evt.ICalendarData));
+            }
+            catch
+            {
+                yield break;
+            }
+
+            ve = cal.Events.FirstOrDefault(e => string.Equals(e.Uid, evt.Uid, StringComparison.Ordinal))
+                 ?? cal.Events.FirstOrDefault();
         }
 
-        var ve = cal.Events.FirstOrDefault(e => string.Equals(e.Uid, evt.Uid, StringComparison.Ordinal))
-                 ?? cal.Events.FirstOrDefault();
         if (ve is null)
         {
             yield break;
@@ -84,27 +119,24 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         var startCal = new CalDateTime(evalStartUtc, "UTC");
         var rangeEndDt = rangeEnd.UtcDateTime;
         var options = new EvaluationOptions();
-        var guard = 0;
-        foreach (var occ in ve.GetOccurrences(startCal, options))
+
+        // Materialize under lock when sharing a cached Calendar (G4). Without a cache the
+        // Calendar is thread-local to this call, so no lock is needed.
+        List<(DateTime startUtc, DateTime endUtc)> materialised;
+        if (_cache is not null)
         {
-            if (++guard > 2000)
+            lock (ExpandLock)
             {
-                yield break;
+                materialised = MaterialiseOccurrences(ve, startCal, options, occDuration, rangeEndDt);
             }
+        }
+        else
+        {
+            materialised = MaterialiseOccurrences(ve, startCal, options, occDuration, rangeEndDt);
+        }
 
-            var startUtc = IcalMapper.CalDateTimeToUtc(occ.Period.StartTime);
-            if (startUtc >= rangeEndDt)
-            {
-                yield break;
-            }
-
-            // In this Ical.Net build each occurrence's Period.EndTime is frequently null even
-            // when DTEND/DURATION are set on the parent VEVENT — only Period.Duration is populated.
-            // Recover the end from the parent's effective duration when needed.
-            var endUtc = occ.Period.EndTime is not null
-                ? IcalMapper.CalDateTimeToUtc(occ.Period.EndTime)
-                : (occDuration > TimeSpan.Zero ? startUtc.Add(occDuration) : startUtc);
-
+        foreach (var (startUtc, endUtc) in materialised)
+        {
             // Final overlap filter: keep occurrences that actually intersect [rangeStart, rangeEnd).
             if (!Overlaps(
                     new DateTimeOffset(DateTime.SpecifyKind(startUtc, DateTimeKind.Utc)),
@@ -123,6 +155,41 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
                 EndUtc = new DateTimeOffset(DateTime.SpecifyKind(endUtc, DateTimeKind.Utc)),
             };
         }
+    }
+
+    private static List<(DateTime startUtc, DateTime endUtc)> MaterialiseOccurrences(
+        IcalEvent ve,
+        CalDateTime startCal,
+        EvaluationOptions options,
+        TimeSpan occDuration,
+        DateTime rangeEndDt)
+    {
+        var list = new List<(DateTime, DateTime)>();
+        var guard = 0;
+        foreach (var occ in ve.GetOccurrences(startCal, options))
+        {
+            if (++guard > 2000)
+            {
+                break;
+            }
+
+            var startUtc = IcalMapper.CalDateTimeToUtc(occ.Period.StartTime);
+            if (startUtc >= rangeEndDt)
+            {
+                break;
+            }
+
+            // In this Ical.Net build each occurrence's Period.EndTime is frequently null even
+            // when DTEND/DURATION are set on the parent VEVENT — only Period.Duration is populated.
+            // Recover the end from the parent's effective duration when needed.
+            var endUtc = occ.Period.EndTime is not null
+                ? IcalMapper.CalDateTimeToUtc(occ.Period.EndTime)
+                : (occDuration > TimeSpan.Zero ? startUtc.Add(occDuration) : startUtc);
+
+            list.Add((startUtc, endUtc));
+        }
+
+        return list;
     }
 
     private static TimeSpan EffectiveDuration(IcalEvent ve)
