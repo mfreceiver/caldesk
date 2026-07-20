@@ -107,6 +107,14 @@ public partial class App : Application
         _week = new WeekWindow(_vm);
         _week.Activated += (_, _) => _lastShown = _week;
         ApplyWindowSettings(_week, _settingsSvc.Current);
+        _week.SizeChanged += (_, _) =>
+        {
+            // Keep settings current in-memory so any later Save (OpenMonth/BackToWeek/OnExit)
+            // captures the live size; Hide/Show already preserves it across tray toggles.
+            var c = _settingsSvc.Current;
+            c.WindowWidth = _week.Width;
+            c.WindowHeight = _week.Height;
+        };
         StartupLog.Log("OnStartup: WeekWindow constructed");
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
@@ -116,7 +124,16 @@ public partial class App : Application
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
             onEdit: id => _ = OpenQuickAddAsync(null, id));
         _month = new MonthWindow(_monthVm);
+        // Apply saved size/opacity/lock ONCE at construction; OpenMonth only Show()s afterwards,
+        // so tray hide/reopen preserves the user's in-session resize instead of resetting it.
+        ApplyMonthWindowSettings(_month, _settingsSvc.Current);
         _month.Activated += (_, _) => _lastShown = _month;
+        _month.SizeChanged += (_, _) =>
+        {
+            var c = _settingsSvc.Current;
+            c.MonthWindowWidth = _month.Width;
+            c.MonthWindowHeight = _month.Height;
+        };
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
         StartupLog.Log("OnStartup: MonthWindow constructed");
@@ -398,7 +415,6 @@ public partial class App : Application
             return;
         }
 
-        ApplyMonthWindowSettings(_month, _settingsSvc.Current);
         if (!_month.IsVisible)
         {
             _month.Show();
