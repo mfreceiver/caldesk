@@ -15,6 +15,7 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
         <conv:ColorOrAccentConverter x:Key="ColorOrAccent" />
+        <conv:DateEqualsConverter x:Key="DateEqualsConverter" />
         <conv:BrushResourceProxy x:Key="AccentProxy" Brush="{DynamicResource AccentBrush}" />
     </Window.Resources>
 
@@ -118,11 +119,14 @@
                                                         <DataTrigger Binding="{Binding IsInMonth}" Value="False">
                                                             <Setter Property="Opacity" Value="0.45" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding IsToday}" Value="True">
+                                                        <DataTrigger Value="True">
+                                                            <DataTrigger.Binding>
+                                                                <MultiBinding Converter="{StaticResource DateEqualsConverter}">
+                                                                    <Binding Path="Date" />
+                                                                    <Binding Path="DataContext.SelectedDate" RelativeSource="{RelativeSource AncestorType=Window}" />
+                                                                </MultiBinding>
+                                                            </DataTrigger.Binding>
                                                             <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource TodayBorderBrush}" />
-                                                            <Setter Property="BorderThickness" Value="1" />
-                                                            <Setter Property="Opacity" Value="1" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -253,14 +257,14 @@
                                 </Style.Triggers>
                             </Style>
                         </StackPanel.Style>
-                        <!-- Combined day details: two columns, five rows visible (up to ten items). -->
-                         <ItemsControl ItemsSource="{Binding SelectedDay.AllEvents}" Margin="0,0,0,2">
-                             <ItemsControl.ItemsPanel>
-                                 <ItemsPanelTemplate>
-                                     <UniformGrid Columns="2" />
-                                 </ItemsPanelTemplate>
-                             </ItemsControl.ItemsPanel>
-                             <ItemsControl.ItemTemplate>
+                         <!-- Column-first detail layout: fill the left column top-to-bottom, then right. -->
+                         <Grid Margin="0,0,0,2">
+                             <Grid.ColumnDefinitions>
+                                 <ColumnDefinition Width="*" />
+                                 <ColumnDefinition Width="*" />
+                             </Grid.ColumnDefinitions>
+                             <ItemsControl Grid.Column="0" ItemsSource="{Binding SelectedDay.LeftEvents}">
+<ItemsControl.ItemTemplate>
                                  <DataTemplate>
                                      <Button Style="{StaticResource RowButton}" Margin="0,1"
                                              Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -306,7 +310,57 @@
                                      </Button>
                                  </DataTemplate>
                              </ItemsControl.ItemTemplate>
-                         </ItemsControl>
+                             </ItemsControl>
+                             <ItemsControl Grid.Column="1" ItemsSource="{Binding SelectedDay.RightEvents}">
+<ItemsControl.ItemTemplate>
+                                 <DataTemplate>
+                                     <Button Style="{StaticResource RowButton}" Margin="0,1"
+                                             Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                             CommandParameter="{Binding EventId}">
+                                         <Border Padding="5,2" Margin="1" CornerRadius="4">
+                                             <Grid>
+                                                 <Grid.RowDefinitions>
+                                                     <RowDefinition Height="Auto" />
+                                                     <RowDefinition Height="Auto" />
+                                                 </Grid.RowDefinitions>
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="Auto" />
+                                                     <ColumnDefinition Width="*" />
+                                                 </Grid.ColumnDefinitions>
+                                                 <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Width="5" Height="5"
+                                                         CornerRadius="2" Margin="0,0,5,0" VerticalAlignment="Top">
+                                                     <Border.Background>
+                                                         <MultiBinding Converter="{StaticResource ColorOrAccent}">
+                                                             <Binding Path="Color" />
+                                                             <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
+                                                         </MultiBinding>
+                                                     </Border.Background>
+                                                 </Border>
+                                                 <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Summary}"
+                                                            FontSize="{DynamicResource FontBody}" TextTrimming="CharacterEllipsis"
+                                                            TextWrapping="NoWrap">
+                                                     <TextBlock.Style>
+                                                         <Style TargetType="TextBlock">
+                                                             <Style.Triggers>
+                                                                 <DataTrigger Binding="{Binding IsOngoing}" Value="True">
+                                                                     <Setter Property="FontWeight" Value="Bold" />
+                                                                     <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                                 </DataTrigger>
+                                                             </Style.Triggers>
+                                                         </Style>
+                                                     </TextBlock.Style>
+                                                 </TextBlock>
+                                                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TimeRangeLabel}"
+                                                            FontSize="{DynamicResource FontSmall}" Foreground="{DynamicResource AccentBrush}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                             </Grid>
+                                         </Border>
+                                     </Button>
+                                 </DataTemplate>
+                             </ItemsControl.ItemTemplate>
+                             </ItemsControl>
+                         </Grid>
+
 
                         <!-- in-month empty-day hint -->
                         <TextBlock Text="该日无事项" FontSize="{DynamicResource FontSmall}" Opacity="0.4" Margin="2,2,0,0"

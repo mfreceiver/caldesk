@@ -94,6 +94,41 @@ public static class IcalMapper
         };
     }
 
+    /// <summary>
+    /// Converts an Ical.Net CalDateTime to a UTC DateTime, working around AsUtc not
+    /// actually converting TZID-based times when the VTIMEZONE isn't resolvable by the
+    /// library (it just re-labels the wall-clock value as UTC). Uses .NET TimeZoneInfo,
+    /// which on .NET 6+ accepts both IANA ("Asia/Shanghai") and Windows ("China Standard
+    /// Time") timezone IDs.
+    /// </summary>
+    internal static DateTime CalDateTimeToUtc(CalDateTime dt)
+    {
+        // No TZID → Z-suffixed UTC (AsUtc is correct) or floating (treated as UTC, pre-existing).
+        if (string.IsNullOrEmpty(dt.TzId))
+        {
+            return DateTime.SpecifyKind(dt.AsUtc, DateTimeKind.Utc);
+        }
+
+        // TZID present → AsUtc may not actually convert (just relabels wall-clock as UTC).
+        // Rebuild the civil DateTime from the correct time-of-day components and convert
+        // via .NET TimeZoneInfo (accepts both IANA and Windows TZIDs on .NET 6+).
+        var civil = new DateTime(
+            dt.Year, dt.Month, dt.Day,
+            dt.AsUtc.Hour, dt.AsUtc.Minute, dt.AsUtc.Second,
+            DateTimeKind.Unspecified);
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(dt.TzId);
+            return TimeZoneInfo.ConvertTimeToUtc(civil, tz);
+        }
+        catch
+        {
+            // TZID not a known system zone — fall back to Local (better than raw civil-as-UTC).
+            return TimeZoneInfo.ConvertTimeToUtc(civil, TimeZoneInfo.Local);
+        }
+    }
+
     private static DateTimeOffset ToUtc(CalDateTime? dt)
     {
         if (dt is null)
@@ -109,8 +144,7 @@ public static class IcalMapper
             return AllDayDate.ToUtcInstant(date, TimeZoneInfo.Local);
         }
 
-        var utc = dt.AsUtc;
-        return new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+        return new DateTimeOffset(CalDateTimeToUtc(dt));
     }
 
     private static DateTimeOffset ResolveEnd(IcalEvent ve, CalDateTime? start, DateTimeOffset startUtc, bool isAllDay)

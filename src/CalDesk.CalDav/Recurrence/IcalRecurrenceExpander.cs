@@ -1,3 +1,4 @@
+using CalDesk.CalDav.Calendar;
 using CalDesk.Core.Models;
 using CalDesk.Core.Recurrence;
 using Ical.Net.CalendarComponents;
@@ -84,7 +85,7 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
                 yield break;
             }
 
-            var startUtc = occ.Period.StartTime.AsUtc;
+            var startUtc = IcalMapper.CalDateTimeToUtc(occ.Period.StartTime);
             if (startUtc >= rangeEndDt)
             {
                 yield break;
@@ -93,7 +94,9 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
             // In this Ical.Net build each occurrence's Period.EndTime is frequently null even
             // when DTEND/DURATION are set on the parent VEVENT — only Period.Duration is populated.
             // Recover the end from the parent's effective duration when needed.
-            var endUtc = occ.Period.EndTime?.AsUtc ?? (occDuration > TimeSpan.Zero ? startUtc.Add(occDuration) : startUtc);
+            var endUtc = occ.Period.EndTime is not null
+                ? IcalMapper.CalDateTimeToUtc(occ.Period.EndTime)
+                : (occDuration > TimeSpan.Zero ? startUtc.Add(occDuration) : startUtc);
 
             // Final overlap filter: keep occurrences that actually intersect [rangeStart, rangeEnd).
             if (!Overlaps(

@@ -37,6 +37,8 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             var all = bucket.Where(x => x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
             var timed = bucket.Where(x => !x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
 
+            var allEvents = all.Concat(timed).ToList();
+            var half = (allEvents.Count + 1) / 2;
             days.Add(new WeekDay
             {
                 Date = date,
@@ -45,7 +47,9 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                 IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                 AllDay = all,
                 Timed = timed,
-                AllEvents = all.Concat(timed).ToList(),
+                AllEvents = allEvents,
+                LeftEvents = allEvents.Take(half).ToList(),
+                RightEvents = allEvents.Skip(half).ToList(),
             });
         }
 
@@ -150,6 +154,8 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         var all = bucket.Where(x => x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
         var timed = bucket.Where(x => !x.IsAllDay).OrderBy(x => x.StartUtc).ToList();
         var idx = ((int)date.DayOfWeek + 6) % 7;
+        var allEvents = all.Concat(timed).ToList();
+        var half = (allEvents.Count + 1) / 2;
         return new WeekDay
         {
             Date = date,
@@ -157,7 +163,9 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             IsToday = date == today,
             AllDay = all,
             Timed = timed,
-            AllEvents = all.Concat(timed).ToList(),
+            AllEvents = allEvents,
+            LeftEvents = allEvents.Take(half).ToList(),
+            RightEvents = allEvents.Skip(half).ToList(),
         };
     }
 

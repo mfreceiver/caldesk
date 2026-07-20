@@ -30,6 +30,10 @@ public sealed class WeekDay
 
     /// <summary>All occurrences in display order: all-day first, then timed.</summary>
     public IReadOnlyList<OccurrenceItem> AllEvents { get; init; } = Array.Empty<OccurrenceItem>();
+
+    public IReadOnlyList<OccurrenceItem> LeftEvents { get; init; } = Array.Empty<OccurrenceItem>();
+
+    public IReadOnlyList<OccurrenceItem> RightEvents { get; init; } = Array.Empty<OccurrenceItem>();
 }
 
 /// <summary>A display row for a single occurrence within a day.</summary>
