@@ -49,7 +49,8 @@ public sealed class SystemThemeWatcher : IDisposable
     private static void Notify()
     {
         if (_current?.TryGetTarget(out var w) != true) return;
-        w._dispatcher.BeginInvoke(DispatcherPriority.DataBind,
+        var dispatcher = w._dispatcher;
+        dispatcher.BeginInvoke(DispatcherPriority.DataBind,
             new Action(() => w.EffectiveThemeChanged?.Invoke(SystemThemeWatcher.GetEffectiveTheme())));
     }
 
