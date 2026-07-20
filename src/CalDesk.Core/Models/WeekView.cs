@@ -39,6 +39,9 @@ public sealed class OccurrenceItem
     /// <summary>"全天" for all-day, else "HH:mm" in the display time zone.</summary>
     public required string TimeLabel { get; init; }
 
+    /// <summary>Display range in the display time zone, used by month day details.</summary>
+    public required string TimeRangeLabel { get; init; }
+
     public bool IsAllDay { get; init; }
 
     /// <summary>Currently in progress (highlighted per G2-10).</summary>

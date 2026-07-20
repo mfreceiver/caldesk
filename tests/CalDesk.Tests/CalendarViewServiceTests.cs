@@ -283,4 +283,28 @@ public sealed class CalendarViewServiceTests
         Assert.Contains(CalendarViewService.Headers, h => day.Header.StartsWith(h));
         Assert.True(day.IsToday); // date == today
     }
+
+    [Fact]
+    public void BuildDay_TimeRangeLabel_FormatsOvernightLongAndZeroLength()
+    {
+        var calId = Guid.NewGuid();
+        var calendars = new Dictionary<Guid, CalendarInfo> { [calId] = new() };
+        var ev = new CalendarEvent
+        {
+            Id = Guid.NewGuid(), CalendarId = calId, Summary = "range",
+            StartUtc = new DateTimeOffset(2026, 7, 15, 23, 30, 0, TimeSpan.Zero),
+            EndUtc = new DateTimeOffset(2026, 7, 16, 1, 0, 0, TimeSpan.Zero)
+        };
+        var svc = new CalendarViewService(new StubExpander());
+        Assert.Equal("23:30→次日01:00", svc.BuildDay(new[] { ev }, calendars,
+            new DateOnly(2026, 7, 15), Tz, Today, Now).Timed.Single().TimeRangeLabel);
+
+        ev.EndUtc = new DateTimeOffset(2026, 7, 17, 1, 0, 0, TimeSpan.Zero);
+        Assert.Equal("23:30→07-17 01:00", svc.BuildDay(new[] { ev }, calendars,
+            new DateOnly(2026, 7, 15), Tz, Today, Now).Timed.Single().TimeRangeLabel);
+
+        ev.EndUtc = ev.StartUtc;
+        Assert.Equal("23:30-23:30", svc.BuildDay(new[] { ev }, calendars,
+            new DateOnly(2026, 7, 15), Tz, Today, Now).Timed.Single().TimeRangeLabel);
+    }
 }

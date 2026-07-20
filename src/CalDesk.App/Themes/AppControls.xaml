@@ -33,7 +33,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <ContentPresenter />
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -117,6 +119,7 @@
 
     <!-- overlay 滚动条不占列；调用方给右 Padding 预留（见 §3.9） -->
     <Style x:Key="SlimScrollViewer" TargetType="ScrollViewer">
+        <Setter Property="Padding" Value="4,0,4,0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollViewer">
@@ -141,6 +144,11 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <Trigger Property="ComputedVerticalScrollBarVisibility" Value="Visible">
+                <Setter Property="Padding" Value="4,0,12,0" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ── card surface controls (QuickAdd etc.) ──────────────────────────── -->

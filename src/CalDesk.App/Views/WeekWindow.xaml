@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
+        xmlns:controls="clr-namespace:CalDesk.App.Controls"
         xmlns:conv="clr-namespace:CalDesk.App.Converters"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:WeekViewModel}"
         Title="CalDesk" Width="330" Height="600"
@@ -64,9 +65,10 @@
             </Border>
 
             <!-- days (W1: SlimScrollViewer + 对称 Padding，右 12 留给 overlay 不遮内容) -->
-            <ScrollViewer Grid.Row="1" Style="{StaticResource SlimScrollViewer}"
-                          VerticalScrollBarVisibility="Auto" Padding="4,0,12,0">
+            <ScrollViewer x:Name="WeekScrollViewer" Grid.Row="1" Style="{StaticResource SlimScrollViewer}"
+                          VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Week.Days}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><controls:WeekDaysPanel ViewportHeight="{Binding ActualHeight, ElementName=WeekScrollViewer}" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <!-- W2/W4：日卡 Padding 12,8 + 1px 边框；bg/border 走 Style.Triggers（非本地属性） -->
@@ -87,7 +89,7 @@
                                     </Style>
                                 </Border.Style>
                                 <StackPanel MouseLeftButtonDown="OnDayDoubleAdd">
-                                    <Grid Margin="0,0,0,3">
+                                    <Grid Margin="0,0,0,1">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
@@ -107,10 +109,8 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                            <TextBlock Text=" 今天" FontSize="{DynamicResource FontTiny}" Foreground="{DynamicResource AccentBrush}" Margin="4,0,0,0"
-                                                       Visibility="{Binding IsToday, Converter={StaticResource Bool2Vis}}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Content="＋" FontSize="{DynamicResource FontTitle}" Style="{StaticResource GhostButton}"
+                                        <Button Grid.Column="1" Content="＋" FontSize="{DynamicResource FontHeader}" VerticalAlignment="Top" Margin="0,-1,-4,0" Style="{StaticResource GhostButton}"
                                                 Command="{Binding DataContext.AddNewCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding Date}" ToolTip="为该日新增" />
                                     </Grid>

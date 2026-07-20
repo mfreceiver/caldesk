@@ -97,12 +97,11 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- Cell: click anywhere → SelectDayCommand(Date). Event rows below
-                                         are nested Buttons with their own EditCommand that intercept clicks. -->
+                                    <!-- Cell is the only month-grid command; preview rows are inert. -->
                                     <Button Style="{StaticResource RowButton}" Margin="1"
                                             Command="{Binding DataContext.SelectDayCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding Date}">
-                                        <Border MinHeight="92" Padding="2,1" CornerRadius="4">
+                                        <Border Padding="2,1" CornerRadius="4">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="{DynamicResource DayCardBrush}" />
@@ -118,43 +117,14 @@
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
-                                            <StackPanel VerticalAlignment="Center">
-                                                <Border CornerRadius="7" Padding="6,1" Margin="1,0,1,2" HorizontalAlignment="Left">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="Transparent" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                    <!-- solid accent pill + OnAccent text (maps #3B82F6) -->
-                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="{Binding Day}" FontSize="{DynamicResource FontSmall}" HorizontalAlignment="Center">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
-                                                                <Setter Property="FontWeight" Value="Normal" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsWeekend}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
-                                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-                                                <ItemsControl ItemsSource="{Binding Preview}">
+                                            <Grid>
+                                            <TextBlock Text="{Binding Day}" IsHitTestVisible="False" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                       FontSize="{DynamicResource FontMonthDate}" FontWeight="Bold" Opacity="0.28" />
+                                            <StackPanel VerticalAlignment="Top" Margin="0,18,0,0">
+                                                <ItemsControl ItemsSource="{Binding Preview}" IsHitTestVisible="False">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Button Style="{StaticResource RowButton}" Margin="0"
-                                                                    Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                    CommandParameter="{Binding EventId}">
+                                                            <Grid IsHitTestVisible="False">
                                                                 <!-- M2 月格：2 列 [色点|Summary]，不显 TimeLabel（R11） -->
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
@@ -171,19 +141,20 @@
                                                                         </Border.Background>
                                                                     </Border>
                                                                     <TextBlock Grid.Column="1" Text="{Binding Summary}"
-                                                                               FontSize="{DynamicResource FontTiny}"
+                                                                               FontSize="{DynamicResource FontMonthCell}"
                                                                                TextTrimming="CharacterEllipsis" />
                                                                 </Grid>
-                                                            </Button>
+                                                            </Grid>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
                                                 <!-- Overflow indicator (+N): clicking the cell already triggers SelectDay -->
                                                 <TextBlock Text="{Binding OverflowCount, StringFormat={}+{0}}"
-                                                           FontSize="{DynamicResource FontTiny}"
+                                                           FontSize="{DynamicResource FontMonthCell}"
                                                            Foreground="{DynamicResource MutedForegroundBrush}" Margin="2,0,0,0"
                                                            Visibility="{Binding HasOverflow, Converter={StaticResource Bool2Vis}}" />
                                             </StackPanel>
+                                            </Grid>
                                         </Border>
                                     </Button>
                                 </DataTemplate>
@@ -195,11 +166,11 @@
 
             <!-- M5: static hairline (GridSplitter removed) -->
             <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
-                    Margin="0,6,0,4" SnapsToDevicePixels="True" />
+                    Margin="0,2,0,2" SnapsToDevicePixels="True" />
 
             <!-- bottom day-detail: header line + per-day ＋, then all-day + timed events -->
             <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Padding="2,0,6,0">
-                <StackPanel Margin="0,4,0,0">
+                <StackPanel Margin="0,1,0,0">
                     <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -259,11 +230,11 @@
                                         <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="4" Padding="6,2" Margin="0,1">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="46" />
+                                                    <ColumnDefinition Width="86" />
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="{Binding TimeLabel}"
+                                                <TextBlock Grid.Column="0" Text="{Binding TimeRangeLabel}"
                                                            FontSize="{DynamicResource FontSmall}"
                                                            Foreground="{DynamicResource AccentBrush}"
                                                            VerticalAlignment="Center" />
@@ -296,11 +267,11 @@
                                             CommandParameter="{Binding EventId}">
                                         <Grid Margin="0,1">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="46" />
+                                                <ColumnDefinition Width="86" />
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding TimeLabel}"
+                                            <TextBlock Grid.Column="0" Text="{Binding TimeRangeLabel}"
                                                        FontSize="{DynamicResource FontSmall}"
                                                        Foreground="{DynamicResource AccentBrush}"
                                                        VerticalAlignment="Center" />

@@ -210,7 +210,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
 
                 // Place the occurrence on every overlapping day (clipped to the bucketed range),
                 // so multi-day all-day events and overnight events aren't dropped from later days.
-                var item = ToItem(occ, startZoned, nowUtc);
+                var item = ToItem(occ, startZoned, endZoned, nowUtc);
                 for (var day = startDay; day <= lastDay; day = day.AddDays(1))
                 {
                     if (byDay.TryGetValue(day, out var bucket))
@@ -224,7 +224,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         return byDay;
     }
 
-    private static OccurrenceItem ToItem(EventOccurrence occ, DateTimeOffset zonedStart, DateTimeOffset nowUtc)
+    private static OccurrenceItem ToItem(EventOccurrence occ, DateTimeOffset zonedStart, DateTimeOffset zonedEnd, DateTimeOffset nowUtc)
     {
         var ongoing = occ.StartUtc <= nowUtc && nowUtc < occ.EndUtc;
         return new OccurrenceItem
@@ -232,12 +232,23 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             EventId = occ.Source.Id,
             Summary = string.IsNullOrEmpty(occ.Summary) ? "(无标题)" : occ.Summary,
             TimeLabel = occ.IsAllDay ? "全天" : zonedStart.ToString("HH:mm", CultureInfo.InvariantCulture),
+            TimeRangeLabel = FormatTimeRange(occ.IsAllDay, zonedStart, zonedEnd),
             IsAllDay = occ.IsAllDay,
             IsOngoing = ongoing,
             Color = occ.Color,
             StartUtc = occ.StartUtc,
             EndUtc = occ.EndUtc,
         };
+    }
+
+    private static string FormatTimeRange(bool allDay, DateTimeOffset start, DateTimeOffset end)
+    {
+        if (allDay) return "全天";
+        var startText = start.ToString("HH:mm", CultureInfo.InvariantCulture);
+        var endText = end.ToString("HH:mm", CultureInfo.InvariantCulture);
+        if (start.Date == end.Date) return $"{startText}-{endText}";
+        if (end.Date == start.Date.AddDays(1)) return $"{startText}→次日{endText}";
+        return $"{startText}→{end:MM-dd HH:mm}";
     }
 
     /// <summary>0 for Monday .. 6 for Sunday.</summary>

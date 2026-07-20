@@ -90,14 +90,15 @@ public partial class MonthWindow : Window
     public void ComputeBottomLimits()
     {
         double body = (double)Application.Current.FindResource("FontBody");
-        double tiny = (double)Application.Current.FindResource("FontTiny");
+        double monthCell = (double)Application.Current.FindResource("FontMonthCell");
+        double monthDate = (double)Application.Current.FindResource("FontMonthDate");
         double micro = (double)Application.Current.FindResource("FontMicro");
         double small = (double)Application.Current.FindResource("FontSmall");
         double headerFs = (double)Application.Current.FindResource("FontHeader");
 
-        double cellRow = Math.Ceiling(tiny * 1.35) + 2;        // 日格事件行
-        double datePill = Math.Ceiling(small * 1.3) + 4;       // 日格日期药丸
-        double cellMin = datePill + 3 * cellRow + 2;           // 每格 3 事件
+        double cellRow = Math.Ceiling(monthCell * 1.35) + 2;
+        double dateLayer = Math.Ceiling(monthDate * 1.3) + 4;
+        double cellMin = dateLayer + 3 * cellRow + 2;
         double gridMin = 6 * cellMin;                          // R4：Row2.MinHeight = 6×cell
 
         double detailRow = Math.Ceiling(body * 1.35) + 6;
