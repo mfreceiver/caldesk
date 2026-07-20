@@ -69,9 +69,16 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         var lookback = occDuration > TimeSpan.Zero && occDuration <= MaxLookback ? occDuration : TimeSpan.Zero;
         var evalStartUtc = rangeStart.UtcDateTime - lookback;
         // Never ask for anything earlier than the event's own DTSTART (would just be wasted work).
-        if (ve.DtStart?.AsUtc is { } dtStartUtc && dtStartUtc > evalStartUtc)
+        // Use CalDateTimeToUtc, NOT ve.DtStart.AsUtc: AsUtc relabels a FLOATING wall-clock value as
+        // UTC (10:00 → 10:00Z), which would give a wrong DTSTART boundary and clip floating
+        // recurring occurrences out of the evaluation window.
+        if (ve.DtStart is { } dtStart)
         {
-            evalStartUtc = dtStartUtc;
+            var dtStartUtc = IcalMapper.CalDateTimeToUtc(dtStart);
+            if (dtStartUtc > evalStartUtc)
+            {
+                evalStartUtc = dtStartUtc;
+            }
         }
 
         var startCal = new CalDateTime(evalStartUtc, "UTC");

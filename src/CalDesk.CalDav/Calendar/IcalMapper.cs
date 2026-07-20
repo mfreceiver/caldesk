@@ -29,13 +29,24 @@ public static class IcalMapper
     /// past a resource that failed to parse — that would permanently lose the resource.</summary>
     public static CalendarParseResult TryToCalendarEvents(string raw, Guid calendarId, string? href, string? etag)
     {
-        Ical.Net.Calendar cal;
         try
         {
-            cal = Ical.Net.Calendar.Load(new StringReader(raw));
+            var cal = Ical.Net.Calendar.Load(new StringReader(raw));
+            var events = new List<CalendarEvent>();
+            foreach (var ve in cal.Events)
+            {
+                events.Add(Map(ve, calendarId, href, etag, raw));
+            }
+
+            return new CalendarParseResult(Success: true, Events: events, Error: null, Href: href, ETag: etag);
         }
         catch (Exception ex)
         {
+            // Covers BOTH calendar-load failures AND event-mapping failures. Mapping can now throw
+            // when a TZID is not resolvable by .NET TimeZoneInfo (TimeZoneNotFoundException) — we no
+            // longer silently reinterpret an unknown zone as Local. A malformed or unresolvable
+            // resource must surface as a parse error so sync quarantines it, rather than crashing the
+            // run or producing a silently-wrong time.
             return new CalendarParseResult(
                 Success: false,
                 Events: new List<CalendarEvent>(),
@@ -43,14 +54,6 @@ public static class IcalMapper
                 Href: href,
                 ETag: etag);
         }
-
-        var events = new List<CalendarEvent>();
-        foreach (var ve in cal.Events)
-        {
-            events.Add(Map(ve, calendarId, href, etag, raw));
-        }
-
-        return new CalendarParseResult(Success: true, Events: events, Error: null, Href: href, ETag: etag);
     }
 
     /// <summary>Serialize an event for upload. When raw data exists, edit it in place
@@ -95,39 +98,101 @@ public static class IcalMapper
     }
 
     /// <summary>
-    /// Converts an Ical.Net CalDateTime to a UTC DateTime, working around AsUtc not
-    /// actually converting TZID-based times when the VTIMEZONE isn't resolvable by the
-    /// library (it just re-labels the wall-clock value as UTC). Uses .NET TimeZoneInfo,
-    /// which on .NET 6+ accepts both IANA ("Asia/Shanghai") and Windows ("China Standard
-    /// Time") timezone IDs.
+    /// Converts an Ical.Net CalDateTime to a UTC DateTime WITHOUT relying on the library's
+    /// AsUtc, which is unsafe for two of the three DATE-TIME forms in Ical.Net 5.2.3:
+    ///  · FLOATING (no Z, no TZID): AsUtc keeps the wall-clock value and just stamps it UTC, so
+    ///    a local 10:00 becomes 10:00Z and displays +offset. We interpret the wall-clock in the
+    ///    user's local zone (ConvertTimeToUtc once) instead.
+    ///  · TZID: AsUtc's behavior is platform/library-dependent (sometimes converts, sometimes
+    ///    relabels), so deriving the time-of-day from it risks double conversion. We take
+    ///    dt.Value (the raw civil fields, Unspecified) and convert exactly once via TimeZoneInfo.
+    ///  · UTC-Z (T…Z): parsed with TzId=="UTC" and IsUtc==true; dt.Value is already the UTC
+    ///    instant, we only attach Utc kind.
+    /// Classification order matters: VALUE=DATE also has a null TzId (so Ical.Net reports
+    /// IsFloating==true for it), therefore HasTime must be checked first. .NET 6+
+    /// TimeZoneInfo accepts both IANA ("Asia/Shanghai") and Windows ("China Standard Time") IDs.
     /// </summary>
     internal static DateTime CalDateTimeToUtc(CalDateTime dt)
+        => CalDateTimeToUtc(dt, TimeZoneInfo.Local);
+
+    /// <summary>Overload with an injectable floating-timezone so tests are deterministic
+    /// (independent of the machine's TimeZoneInfo.Local). Production callers use the single-arg
+    /// entry point, which passes TimeZoneInfo.Local.</summary>
+    internal static DateTime CalDateTimeToUtc(CalDateTime dt, TimeZoneInfo floatingTimeZone)
     {
-        // No TZID → Z-suffixed UTC (AsUtc is correct) or floating (treated as UTC, pre-existing).
-        if (string.IsNullOrEmpty(dt.TzId))
+        ArgumentNullException.ThrowIfNull(dt);
+        ArgumentNullException.ThrowIfNull(floatingTimeZone);
+
+        // VALUE=DATE: not a UTC DATE-TIME. Must be handled before IsFloating — Ical.Net reports
+        // IsFloating==true for DATE because DATE carries no TZID.
+        if (!dt.HasTime)
         {
-            return DateTime.SpecifyKind(dt.AsUtc, DateTimeKind.Utc);
+            var date = new DateOnly(dt.Year, dt.Month, dt.Day);
+            return AllDayDate.ToUtcInstant(date, floatingTimeZone).UtcDateTime;
         }
 
-        // TZID present → take the RAW wall-clock value (dt.Value), NOT dt.AsUtc. Ical.Net's
-        // AsUtc conversion is unreliable across runtimes: on some it converts properly, on
-        // others it just relabels the wall-clock value as UTC. Deriving the time-of-day from
-        // AsUtc therefore risks double conversion when AsUtc does convert (08:00 Shanghai →
-        // AsUtc gives 00:00 → we'd convert that again → 16:00 the prior day). dt.Value is the
-        // literal parsed civil DateTime regardless of platform. Convert exactly once via .NET
-        // TimeZoneInfo (accepts both IANA and Windows TZIDs on .NET 6+).
+        // UTC-Z: Ical.Net 5.2.3 parses a Z-suffixed value with TzId=="UTC" and IsUtc==true.
+        // dt.Value holds the original fields (Unspecified); just attach UTC semantics — no
+        // timezone conversion.
+        if (dt.IsUtc)
+        {
+            return DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc);
+        }
+
         var civil = DateTime.SpecifyKind(dt.Value, DateTimeKind.Unspecified);
 
-        try
+        // FLOATING DATE-TIME: interpret the wall-clock in the user's local timezone.
+        if (dt.IsFloating)
         {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(dt.TzId);
-            return TimeZoneInfo.ConvertTimeToUtc(civil, tz);
+            return ConvertCivilToUtc(civil, floatingTimeZone);
         }
-        catch
+
+        // TZID DATE-TIME: convert the raw wall-clock exactly once in the named zone. Let an
+        // unknown TZID throw (TimeZoneNotFoundException / InvalidTimeZoneException) so the
+        // caller's parse-failure quarantine surfaces it, rather than silently reinterpreting it
+        // as the machine-local zone (which would corrupt the time without notice).
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(dt.TzId!);
+        return ConvertCivilToUtc(civil, timeZone);
+    }
+
+    /// <summary>Converts a civil (Unspecified-kind) local time to UTC, handling DST edge cases
+    /// per RFC 5545 §3.3.5: ambiguous local times resolve to the FIRST occurrence (earlier UTC
+    /// instant / larger offset); nonexistent (gap) local times use the offset in effect just
+    /// before the gap. Plain ConvertTimeToUtc throws on invalid times, so we resolve explicitly.</summary>
+    private static DateTime ConvertCivilToUtc(DateTime civil, TimeZoneInfo timeZone)
+    {
+        TimeSpan offset;
+
+        if (timeZone.IsAmbiguousTime(civil))
         {
-            // TZID not a known system zone — fall back to Local (better than raw civil-as-UTC).
-            return TimeZoneInfo.ConvertTimeToUtc(civil, TimeZoneInfo.Local);
+            // First occurrence = earlier UTC instant = the larger of the two offsets.
+            var offsets = timeZone.GetAmbiguousTimeOffsets(civil);
+            offset = offsets[0] >= offsets[1] ? offsets[0] : offsets[1];
         }
+        else if (timeZone.IsInvalidTime(civil))
+        {
+            // Walk back to the last valid instant before the spring-forward gap and use its offset.
+            var probe = civil.AddMinutes(-1);
+            var floor = civil.AddHours(-2);
+            while (timeZone.IsInvalidTime(probe) && probe > floor)
+            {
+                probe = probe.AddMinutes(-1);
+            }
+
+            if (timeZone.IsInvalidTime(probe))
+            {
+                // Pathological zone/gap — never crash the parse; best-effort direct conversion.
+                return TimeZoneInfo.ConvertTimeToUtc(civil, timeZone);
+            }
+
+            offset = timeZone.GetUtcOffset(probe);
+        }
+        else
+        {
+            offset = timeZone.GetUtcOffset(civil);
+        }
+
+        return new DateTimeOffset(civil, offset).UtcDateTime;
     }
 
     private static DateTimeOffset ToUtc(CalDateTime? dt)

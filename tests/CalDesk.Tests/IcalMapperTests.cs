@@ -1,3 +1,4 @@
+using System.IO;
 using CalDesk.CalDav.Calendar;
 using CalDesk.Core;
 using CalDesk.Core.Models;
@@ -9,6 +10,9 @@ public sealed class IcalMapperTests
 {
     private const string VCalendarHead = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n";
     private const string VCalendarTail = "END:VCALENDAR\r\n";
+
+    // Deterministic tz for the injectable CalDateTimeToUtc overload (machine-local independent).
+    private static readonly TimeZoneInfo Shanghai = TimeZoneInfo.FindSystemTimeZoneById("Asia/Shanghai");
 
     [Fact]
     public void Tzid_DtStart_Converts_WallClock_To_Real_Utc()
@@ -235,7 +239,91 @@ public sealed class IcalMapperTests
         // Backward-compat: the legacy method keeps returning an empty list (it must not throw).
         var malformed = "this is not even an iCalendar object";
 
-        var list = IcalMapper.ToCalendarEvents(malformed, Guid.NewGuid(), null, null);
+        var         list = IcalMapper.ToCalendarEvents(malformed, Guid.NewGuid(), null, null);
         Assert.Empty(list);
+    }
+
+    // ---- Issue: FLOATING / UTC-Z / DATE classification (CalDateTimeToUtc) -------------
+
+    [Fact]
+    public void Floating_DtStart_Is_Interpreted_As_Local_Not_Relabeled_As_Utc()
+    {
+        // The real-world bug: DTSTART:20260722T100000 (no Z, no TZID) is FLOATING. Ical.Net 5.2.3's
+        // AsUtc keeps the wall-clock value and stamps it UTC (10:00Z), so CalDesk displayed 18:00
+        // (+8) instead of 10:00. Floating must be interpreted in the user's local zone:
+        // 10:00 Shanghai → 02:00Z. Uses the injectable overload so the test is machine-independent.
+        var ics = VCalendarHead +
+                  "BEGIN:VEVENT\r\n" +
+                  "UID:floating\r\n" +
+                  "DTSTART:20260722T100000\r\n" +
+                  "DTEND:20260722T110000\r\n" +
+                  "SUMMARY:floating\r\n" +
+                  "END:VEVENT\r\n" +
+                  VCalendarTail;
+
+        var ve = Assert.Single(Ical.Net.Calendar.Load(new StringReader(ics))!.Events);
+
+        Assert.True(ve.DtStart.HasTime);
+        Assert.True(ve.DtStart.IsFloating);
+        Assert.False(ve.DtStart.IsUtc);
+        Assert.Null(ve.DtStart.TzId);
+
+        Assert.Equal(
+            new DateTime(2026, 7, 22, 2, 0, 0, DateTimeKind.Utc),
+            IcalMapper.CalDateTimeToUtc(ve.DtStart, Shanghai));
+        Assert.Equal(
+            new DateTime(2026, 7, 22, 3, 0, 0, DateTimeKind.Utc),
+            IcalMapper.CalDateTimeToUtc(ve.DtEnd, Shanghai));
+    }
+
+    [Fact]
+    public void UtcZ_DtStart_Stays_The_Same_Utc_Instant()
+    {
+        // Z-suffixed UTC must NOT be shifted. Ical.Net parses it with TzId=="UTC", IsUtc==true;
+        // dt.Value already holds the UTC instant and we only attach Utc kind.
+        var ics = VCalendarHead +
+                  "BEGIN:VEVENT\r\n" +
+                  "UID:utc-z\r\n" +
+                  "DTSTART:20260722T100000Z\r\n" +
+                  "DTEND:20260722T110000Z\r\n" +
+                  "SUMMARY:utc\r\n" +
+                  "END:VEVENT\r\n" +
+                  VCalendarTail;
+
+        var ve = Assert.Single(Ical.Net.Calendar.Load(new StringReader(ics))!.Events);
+
+        Assert.True(ve.DtStart.IsUtc);
+        Assert.False(ve.DtStart.IsFloating);
+        Assert.Equal("UTC", ve.DtStart.TzId);
+
+        Assert.Equal(
+            new DateTime(2026, 7, 22, 10, 0, 0, DateTimeKind.Utc),
+            IcalMapper.CalDateTimeToUtc(ve.DtStart, Shanghai));
+    }
+
+    [Fact]
+    public void Date_Value_Maps_To_Local_Midnight_Not_Treated_As_Timed_Floating()
+    {
+        // VALUE=DATE also reports IsFloating==true (no TZID), so HasTime must gate the classification
+        // BEFORE the IsFloating check. 2026-07-22 Shanghai midnight → 2026-07-21 16:00Z.
+        var ics = VCalendarHead +
+                  "BEGIN:VEVENT\r\n" +
+                  "UID:allday-cls\r\n" +
+                  "DTSTART;VALUE=DATE:20260722\r\n" +
+                  "DTEND;VALUE=DATE:20260723\r\n" +
+                  "SUMMARY:allday\r\n" +
+                  "END:VEVENT\r\n" +
+                  VCalendarTail;
+
+        var ve = Assert.Single(Ical.Net.Calendar.Load(new StringReader(ics))!.Events);
+
+        Assert.False(ve.DtStart.HasTime);
+
+        Assert.Equal(
+            new DateTime(2026, 7, 21, 16, 0, 0, DateTimeKind.Utc),
+            IcalMapper.CalDateTimeToUtc(ve.DtStart, Shanghai));
+        Assert.Equal(
+            new DateTime(2026, 7, 22, 16, 0, 0, DateTimeKind.Utc),
+            IcalMapper.CalDateTimeToUtc(ve.DtEnd, Shanghai));
     }
 }
