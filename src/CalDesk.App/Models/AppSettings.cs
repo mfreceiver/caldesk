@@ -23,6 +23,12 @@ public enum AppThemeMode
     Dark,
 }
 
+public enum ViewMode
+{
+    Week,
+    Month,
+}
+
 /// <summary>User-tunable application settings, persisted as JSON in %AppData%\CalDesk.</summary>
 public sealed class AppSettings
 {
@@ -55,6 +61,8 @@ public sealed class AppSettings
 
     /// <summary>Theme mode; swapped at runtime via <c>App.ApplyTheme</c>. Default light.</summary>
     public AppThemeMode Theme { get; set; } = AppThemeMode.Light;
+
+    public ViewMode LastViewMode { get; set; } = ViewMode.Week;
 
     // --- Window-size persistence (used by Task 3: borderless resize + DPI robustness) ---
 

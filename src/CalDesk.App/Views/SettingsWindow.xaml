@@ -127,7 +127,7 @@
                                                 <Button.Template>
                                                     <ControlTemplate TargetType="Button">
                                                         <Border x:Name="Ring" CornerRadius="5" BorderThickness="2"
-                                                                BorderBrush="Transparent" Background="Transparent">
+                                                                BorderBrush="Transparent" Background="Transparent" IsHitTestVisible="True">
                                                             <Grid>
                                                                 <Border CornerRadius="3" Background="{Binding}" />
                                                                 <Border x:Name="InnerRing" CornerRadius="3"

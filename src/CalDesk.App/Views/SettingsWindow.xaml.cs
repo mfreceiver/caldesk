@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using CalDesk.App.ViewModels;
 
 namespace CalDesk.App.Views;
@@ -44,15 +45,15 @@ public partial class SettingsWindow : Window
 
     private static T? FindAncestorDataContext<T>(FrameworkElement fe) where T : class
     {
-        var cur = fe;
+        DependencyObject? cur = fe;
         while (cur is not null)
         {
-            if (cur.DataContext is T row)
+            if (cur is FrameworkElement element && element.DataContext is T row)
             {
                 return row;
             }
 
-            cur = cur.Parent as FrameworkElement;
+            cur = VisualTreeHelper.GetParent(cur);
         }
 
         return null;

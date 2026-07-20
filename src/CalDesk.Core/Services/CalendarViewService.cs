@@ -71,7 +71,10 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
         var last = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
 
         var gridStart = first.AddDays(-DaysSinceMonday(first));
-        var gridEndExclusive = last.AddDays(-DaysSinceMonday(last)).AddDays(7);
+        // Keep the month surface stable at six complete Monday-Sunday rows. Some months
+        // naturally fit five rows; padding with the following spillover week prevents an
+        // empty UniformGrid row from becoming a large unpainted gap in the app shell.
+        var gridEndExclusive = gridStart.AddDays(42);
 
         // Month grid never hides past (lets users browse history).
         var byDay = BucketByDay(

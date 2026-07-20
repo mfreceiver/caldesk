@@ -108,9 +108,6 @@ public partial class App : Application
         _week.Activated += (_, _) => _lastShown = _week;
         ApplyWindowSettings(_week, _settingsSvc.Current);
         StartupLog.Log("OnStartup: WeekWindow constructed");
-        _week.Show();
-        _lastShown = _week;
-        StartupLog.Log("OnStartup: WeekWindow.Show done");
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
         StartupLog.Log("OnStartup: gadget styles + window mode applied");
@@ -123,6 +120,17 @@ public partial class App : Application
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
         StartupLog.Log("OnStartup: MonthWindow constructed");
+
+        if (_settingsSvc.Current.LastViewMode == ViewMode.Month)
+        {
+            OpenMonth();
+        }
+        else
+        {
+            _week.Show();
+            _lastShown = _week;
+            StartupLog.Log("OnStartup: WeekWindow.Show done");
+        }
 
             _tray = FindResource("TrayIcon");
             if (_tray is TaskbarIcon tray)
@@ -402,6 +410,8 @@ public partial class App : Application
         ApplyWindowMode(_month, _settingsSvc.Current);
         _monthVm.NavigateTo(DateOnly.FromDateTime(DateTime.Today));
         _week.Hide();
+        _settingsSvc.Current.LastViewMode = ViewMode.Month;
+        _settingsSvc.Save(_settingsSvc.Current);
     }
 
     private void BackToWeek()
@@ -413,6 +423,9 @@ public partial class App : Application
         }
 
         _lastShown = _week;
+
+        _settingsSvc.Current.LastViewMode = ViewMode.Week;
+        _settingsSvc.Save(_settingsSvc.Current);
 
         _week?.Activate();
     }

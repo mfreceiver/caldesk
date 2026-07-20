@@ -91,14 +91,12 @@ public partial class MonthWindow : Window
     {
         double body = (double)Application.Current.FindResource("FontBody");
         double monthCell = (double)Application.Current.FindResource("FontMonthCell");
-        double monthDate = (double)Application.Current.FindResource("FontMonthDate");
         double micro = (double)Application.Current.FindResource("FontMicro");
         double small = (double)Application.Current.FindResource("FontSmall");
         double headerFs = (double)Application.Current.FindResource("FontHeader");
 
         double cellRow = Math.Ceiling(monthCell * 1.35) + 2;
-        double dateBadge = Math.Ceiling(monthDate * 1.3) + 4;  // top-left DD badge (in-flow, not a watermark)
-        double cellMin = dateBadge + 2 * cellRow + 4;          // DD badge + ~2 event rows + padding
+        double cellMin = 3 * cellRow + 6;                      // overlay DD has no layout height
         double gridMin = 6 * cellMin;                          // R4：Row2.MinHeight = 6×cell
 
         double detailRow = Math.Ceiling(body * 1.35) + 6;
