@@ -65,7 +65,7 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
     /// <summary>Mon..Sun headers, shared with the week view.</summary>
     public IReadOnlyList<string> WeekdayHeaders => CalendarViewService.Headers;
 
-    public void Receive(CalendarColorsChangedMessage _)
+    public void Receive(CalendarColorsChangedMessage message)
     {
         Interlocked.Increment(ref _navVersion);
         _ = LoadAsync();

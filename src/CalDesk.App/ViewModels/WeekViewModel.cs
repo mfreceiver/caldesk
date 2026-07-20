@@ -125,7 +125,7 @@ public sealed partial class WeekViewModel : ObservableObject, IRecipient<Calenda
 
     /// <summary>R12：日历颜色/选择本地变更后刷新色点（无服务器同步）。
     /// 递增 nav 版本以弃用任何在飞的 LoadAsync，再起一次新加载。</summary>
-    public void Receive(CalendarColorsChangedMessage _)
+    public void Receive(CalendarColorsChangedMessage message)
     {
         Interlocked.Increment(ref _navVersion);
         _ = LoadAsync();
