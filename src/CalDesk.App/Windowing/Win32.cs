@@ -22,6 +22,13 @@ internal static partial class Win32
     public const uint SWP_SHOWWINDOW = 0x0040;
     public const uint SWP_NOOWNERZORDER = 0x0200;
 
+    // DWM attributes (dwmapi) — used by DwmAppearance for system shadow + Win11 corners.
+    public const int DWMWA_NCRENDERING_POLICY = 2;
+    public const int DWMNCRP_ENABLED = 2;
+    public const int DWMWA_ALLOW_NCPAINT = 4;
+    public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    public const int DWMWCP_ROUND = 2;
+
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     private static partial IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
@@ -31,6 +38,9 @@ internal static partial class Win32
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [LibraryImport("dwmapi.dll")]
+    public static partial int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int cb);
 
     public static IntPtr GetExtendedStyle(IntPtr hWnd) => GetWindowLongPtr(hWnd, GWL_EXSTYLE);
 

@@ -6,12 +6,19 @@
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
         xmlns:controls="clr-namespace:CalDesk.App.Controls"
         xmlns:conv="clr-namespace:CalDesk.App.Converters"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:WeekViewModel}"
         Title="CalDesk" Width="330" Height="600"
         MinWidth="320" MinHeight="500"
-        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        WindowStyle="None" AllowsTransparency="False" Background="{DynamicResource SurfaceBrush}"
         ShowInTaskbar="False" ResizeMode="CanResize"
         FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
         <!-- R2/§3.11：色点 MultiBinding 的两个伙伴资源（GhostButton/RowButton/ToggleSegment/
@@ -20,10 +27,8 @@
         <conv:BrushResourceProxy x:Key="AccentProxy" Brush="{DynamicResource AccentBrush}"/>
     </Window.Resources>
 
+    <!-- Spike T7S: opaque + WindowChrome; DropShadowEffect removed (DWM shadow via DwmAppearance). -->
     <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="10" Padding="14" MouseLeftButtonDown="OnDrag">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25" Color="Black" />
-        </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
