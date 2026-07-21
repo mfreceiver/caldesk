@@ -119,7 +119,7 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
         var year = Year;
         var monthNumber = MonthNumber;
 
-        // 月视图网格范围统一用 MonthGridRange.For（固定 6 行 42 天），与 CalendarViewService.BuildMonth 共用同一计算。
+        // 月视图网格范围统一用 MonthGridRange.For（自动选择 5 或 6 行），与 CalendarViewService.BuildMonth 共用同一计算。
         var grid = MonthGridRange.For(year, monthNumber);
         var gridStart = grid.Start;
         var gridEndExclusive = grid.EndExclusive;

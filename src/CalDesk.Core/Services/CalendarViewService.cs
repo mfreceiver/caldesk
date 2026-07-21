@@ -45,6 +45,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
                 Header = $"{WeekdayNames[i]} {date.Day}",
                 IsToday = date == today,
                 IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
+                WeekIndex = i, // 0=Monday..6=Sunday
                 AllDay = all,
                 Timed = timed,
                 AllEvents = allEvents,
@@ -212,6 +213,7 @@ public sealed class CalendarViewService(IRecurrenceExpander expander)
             Header = $"{WeekdayNames[idx]} {date.Day}",
             IsToday = date == today,
             IsWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
+            WeekIndex = idx, // 0=Monday..6=Sunday
             AllDay = all,
             Timed = timed,
             AllEvents = allEvents,

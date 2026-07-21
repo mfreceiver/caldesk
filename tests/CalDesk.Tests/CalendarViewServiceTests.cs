@@ -116,6 +116,31 @@ public sealed class CalendarViewServiceTests
         Assert.All(view.Days, d => Assert.True(d.IsEmpty));
     }
 
+    // ---- WeekIndex (T8) ----
+
+    [Fact]
+    public void BuildWeek_SetsWeekIndex_Monday0_Through_Sunday6()
+    {
+        var svc = new CalendarViewService(new StubExpander());
+        var view = svc.BuildWeek(Array.Empty<CalendarEvent>(), new Dictionary<Guid, CalendarInfo>(), Monday, Tz, Today, Now);
+        Assert.Equal(7, view.Days.Count);
+        for (int i = 0; i < 7; i++)
+        {
+            Assert.Equal(i, view.Days[i].WeekIndex);
+        }
+    }
+
+    [Fact]
+    public void BuildDay_SetsWeekIndex_Sunday6()
+    {
+        var svc = new CalendarViewService(new StubExpander());
+        // Use a Sunday date — 2026-07-19 is Sunday
+        var sunday = new DateOnly(2026, 7, 19);
+        // DaysSinceMonday(Sunday) = 6
+        var day = svc.BuildDay(Array.Empty<CalendarEvent>(), new Dictionary<Guid, CalendarInfo>(), sunday, Tz, Today, Now);
+        Assert.Equal(6, day.WeekIndex);
+    }
+
     // ---- Month view ----
 
     private static MonthDay CellAt(MonthView v, int month, int day)

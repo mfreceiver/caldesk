@@ -43,6 +43,11 @@ public sealed class AppSettings
 
     public double WindowLeft { get; set; } = double.NaN;
     public double WindowTop { get; set; } = double.NaN;
+
+    // T10/C1+D6: 月窗独立位置 (DIU)。原"月窗复用周窗位置"导致锁定场景下月窗被错误
+    // 拉到周窗坐标, 退出后亦可能被周窗守卫污染. 月窗与周窗各持独立 Left/Top.
+    public double MonthWindowLeft { get; set; } = double.NaN;
+    public double MonthWindowTop { get; set; } = double.NaN;
     public string? ScreenDeviceName { get; set; }
 
     public int DefaultDurationMinutes { get; set; } = 60;

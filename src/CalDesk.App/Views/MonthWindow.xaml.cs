@@ -102,7 +102,8 @@ public partial class MonthWindow : Window
 
         double cellRow = Math.Ceiling(monthCell * 1.35) + 2;
         double cellMin = 3 * cellRow + 6;                      // overlay DD has no layout height
-        double gridMin = 6 * cellMin;                          // R4：Row2.MinHeight = 6×cell
+        int weekCount = ViewModel.Month?.Weeks?.Count ?? 6; // actual row count (5 or 6)
+        double gridMin = weekCount * cellMin;                  // Row2.MinHeight = weekCount (5 or 6) × cell
 
         double detailRow = Math.Ceiling(body * 1.35) + 6;
         double detailHdr = Math.Ceiling(body * 1.3) + 10;

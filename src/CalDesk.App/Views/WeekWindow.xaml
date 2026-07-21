@@ -73,7 +73,7 @@
             <ScrollViewer x:Name="WeekScrollViewer" Grid.Row="1" Style="{StaticResource SlimScrollViewer}"
                           VerticalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding Week.Days}">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><controls:WeekDaysPanel ViewportHeight="{Binding ActualHeight, ElementName=WeekScrollViewer}" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><controls:WeekDaysPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <!-- W2/W4：日卡 Padding 12,8 + 1px 边框；bg/border 走 Style.Triggers（非本地属性） -->

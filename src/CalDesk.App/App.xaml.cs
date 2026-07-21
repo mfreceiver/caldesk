@@ -42,6 +42,12 @@ public partial class App : Application
     /// 不会丢失最后一次 sync 完成事件.</summary>
     private bool _pendingSyncRefresh;
 
+    /// <summary>T10/C1+D6: 抑制 <see cref="ApplyWindowSettings"/> /
+    /// <see cref="ApplyMonthWindowSettings"/> 写 Left/Top 时由 WPF 同步触发的
+    /// <c>LocationChanged</c> 镜像重入 — 防止"应用设置 → 写 Left/Top → LocationChanged
+    /// → 写 settings → 反向污染"反馈环. 仅在 apply 期间为 true.</summary>
+    private bool _applyingWindowSettings;
+
     // Tray icon is a H.NotifyIcon.Wpf TaskbarIcon declared in App.xaml resources.
     // Accessed dynamically to avoid binding the build to its exact API surface.
     private object? _tray;
@@ -113,6 +119,14 @@ public partial class App : Application
         _week = new WeekWindow(_vm);
         _week.Activated += (_, _) => _lastShown = _week;
         ApplyWindowSettings(_week, _settingsSvc.Current);
+        // T10/C1: 订阅 LocationChanged 把实时位置镜像回 settings. 一次性订阅 (窗口
+        // 构造后即订阅, 整个 App 生命周期不再变更); 镜像逻辑自身用 _applyingWindowSettings
+        // 抑制 apply 触发的同步事件, 避免反馈环.
+        _week.LocationChanged += (_, _) => MirrorWeekLocation();
+        // Loaded 一次性: 启动阶段 ApplyWindowSettings 的 ClampOntoVisibleScreen 可能因
+        // 窗口未 laid-out (ActualWidth=0) 安全 return; Loaded 触发时窗口已有实际尺寸,
+        // 再 clamp 一次确保 saved 在断开屏上时窗口被搬到可见区.
+        _week.Loaded += OnWeekLoaded;
         // T13/A4+B3: SizeChanged → ResizeSession.ScheduleUpdate. 该方法在 resize session
         // 期间（WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE）只 restart 200ms debounce timer，避免
         // 每像素写 settings.json；debounce 到期 / resize 结束 / 非 resize 的一次性事件
@@ -133,6 +147,9 @@ public partial class App : Application
         // so tray hide/reopen preserves the user's in-session resize instead of resetting it.
         ApplyMonthWindowSettings(_month, _settingsSvc.Current);
         _month.Activated += (_, _) => _lastShown = _month;
+        // T10/C1: 镜像 MonthWindow 实时位置到 settings.MonthWindowLeft/Top.
+        _month.LocationChanged += (_, _) => MirrorMonthLocation();
+        _month.Loaded += OnMonthLoaded;
         // T13: 同 WeekWindow — SizeChanged 走 ResizeSession.ScheduleUpdate 去抖落盘。
         _month.SizeChanged += (_, _) => _monthResize?.ScheduleUpdate();
         _month.SourceInitialized += (_, _) => AttachMonthResizeSession();
@@ -357,28 +374,41 @@ public partial class App : Application
         if (idx >= 0) dict[idx] = replacement; else dict.Insert(0, replacement);
     }
 
-    private static void ApplyWindowSettings(WeekWindow w, AppSettings s)
+    private void ApplyWindowSettings(WeekWindow w, AppSettings s)
     {
-        w.IsPositionLocked = s.LockedPosition;
-        if (!double.IsNaN(s.WindowLeft))
+        _applyingWindowSettings = true;
+        try
         {
-            w.Left = s.WindowLeft;
-        }
+            w.IsPositionLocked = s.LockedPosition;
+            if (!double.IsNaN(s.WindowLeft))
+            {
+                w.Left = s.WindowLeft;
+            }
 
-        if (!double.IsNaN(s.WindowTop))
-        {
-            w.Top = s.WindowTop;
-        }
+            if (!double.IsNaN(s.WindowTop))
+            {
+                w.Top = s.WindowTop;
+            }
 
-        // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
-        if (!double.IsNaN(s.WindowWidth))
-        {
-            w.Width = s.WindowWidth;
-        }
+            // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
+            if (!double.IsNaN(s.WindowWidth))
+            {
+                w.Width = s.WindowWidth;
+            }
 
-        if (!double.IsNaN(s.WindowHeight))
+            if (!double.IsNaN(s.WindowHeight))
+            {
+                w.Height = s.WindowHeight;
+            }
+
+            // T10/G3: 多屏 + 负坐标 clamp. 启动阶段窗口未 laid-out (ActualWidth=0) 时
+            // ClampOntoVisibleScreen 因 zero-size 防御会安全 return; OpenSettings 重应用
+            // 时窗口已 shown, 此调用真正生效. 放在 try 内以确保 guard 在 clamp 全程生效.
+            WindowBoundsGuard.ClampOntoVisibleScreen(w);
+        }
+        finally
         {
-            w.Height = s.WindowHeight;
+            _applyingWindowSettings = false;
         }
     }
 
@@ -398,19 +428,118 @@ public partial class App : Application
         }
     }
 
-    private static void ApplyMonthWindowSettings(MonthWindow w, AppSettings s)
+    private void ApplyMonthWindowSettings(MonthWindow w, AppSettings s)
     {
-        w.IsPositionLocked = s.LockedPosition;
-        // The month window has no persisted position of its own; it opens near the week window.
-        // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
-        if (!double.IsNaN(s.MonthWindowWidth))
+        _applyingWindowSettings = true;
+        try
         {
-            w.Width = s.MonthWindowWidth;
-        }
+            w.IsPositionLocked = s.LockedPosition;
+            // T10/C1+D6: 月窗独立位置 (不再复用周窗坐标). NaN/从未保存过 ⇒ 不赋值,
+            // 保留 WPF XAML 默认 (month 窗口由 OpenMonth 决定起点, 后续可拖到任意位置).
+            if (!double.IsNaN(s.MonthWindowLeft))
+            {
+                w.Left = s.MonthWindowLeft;
+            }
 
-        if (!double.IsNaN(s.MonthWindowHeight))
+            if (!double.IsNaN(s.MonthWindowTop))
+            {
+                w.Top = s.MonthWindowTop;
+            }
+
+            // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
+            if (!double.IsNaN(s.MonthWindowWidth))
+            {
+                w.Width = s.MonthWindowWidth;
+            }
+
+            if (!double.IsNaN(s.MonthWindowHeight))
+            {
+                w.Height = s.MonthWindowHeight;
+            }
+
+            // T10/G3: 月窗也走 WindowBoundsGuard — 若 MonthWindowLeft/Top 落在已断开的
+            // 显示器, 把窗口搬到可见区. 放在 try 内以确保 guard 在 clamp 全程生效.
+            WindowBoundsGuard.ClampOntoVisibleScreen(w);
+        }
+        finally
         {
-            w.Height = s.MonthWindowHeight;
+            _applyingWindowSettings = false;
+        }
+    }
+
+    /// <summary>WeekWindow 的 <c>LocationChanged</c> 镜像 — 把实时位置写入
+    /// <see cref="AppSettings.WindowLeft"/><see cref="AppSettings.WindowTop"/> (仅内存,
+    /// OnExit 兜底 Save). apply 期间被 <c>_applyingWindowSettings</c> 抑制, 防止
+    /// "apply → set Left → LocationChanged → 反写 settings" 反馈环.</summary>
+    private void MirrorWeekLocation()
+    {
+        if (_applyingWindowSettings) return;
+        if (_week is null) return;
+        var left = _week.Left;
+        var top = _week.Top;
+        // Defensive: 启动早期 / 隐藏态时 WPF 可能返回 NaN — 不污染 settings.
+        if (double.IsNaN(left) || double.IsInfinity(left) ||
+            double.IsNaN(top) || double.IsInfinity(top))
+        {
+            return;
+        }
+        var c = _settingsSvc.Current;
+        c.WindowLeft = left;
+        c.WindowTop = top;
+    }
+
+    /// <summary>MonthWindow 的 <c>LocationChanged</c> 镜像, 写
+    /// <see cref="AppSettings.MonthWindowLeft"/><see cref="AppSettings.MonthWindowTop"/>.</summary>
+    private void MirrorMonthLocation()
+    {
+        if (_applyingWindowSettings) return;
+        if (_month is null) return;
+        var left = _month.Left;
+        var top = _month.Top;
+        if (double.IsNaN(left) || double.IsInfinity(left) ||
+            double.IsNaN(top) || double.IsInfinity(top))
+        {
+            return;
+        }
+        var c = _settingsSvc.Current;
+        c.MonthWindowLeft = left;
+        c.MonthWindowTop = top;
+    }
+
+    /// <summary>WeekWindow Loaded 一次性回调: 此时窗口已 laid-out, 再 clamp 一次确保
+    /// saved 位置在断开屏上时窗口被搬到可见区 (覆盖 ApplyWindowSettings 阶段的 zero-size
+    /// no-op). 标记 _weekClampedOnLoad 避免重复. 包裹 _applyingWindowSettings 抑制
+    /// clamp 触发的 LocationChanged 镜像回写, 因为本次 clamp 是系统恢复的一部分, 不应
+    /// 将 clamp 后的位置视为用户手动拖动 — 后续 OnExit 或用户主动拖拽才会持久化.</summary>
+    private bool _weekClampedOnLoad;
+    private void OnWeekLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (_weekClampedOnLoad) return;
+        _weekClampedOnLoad = true;
+        _applyingWindowSettings = true;
+        try
+        {
+            WindowBoundsGuard.ClampOntoVisibleScreen(_week);
+        }
+        finally
+        {
+            _applyingWindowSettings = false;
+        }
+    }
+
+    private bool _monthClampedOnLoad;
+    private void OnMonthLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (_monthClampedOnLoad) return;
+        _monthClampedOnLoad = true;
+        _applyingWindowSettings = true;
+        try
+        {
+            WindowBoundsGuard.ClampOntoVisibleScreen(_month);
+        }
+        finally
+        {
+            _applyingWindowSettings = false;
         }
     }
 
@@ -606,10 +735,33 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         var s = _settingsSvc.Current;
-        if (_week is { } w && !s.LockedPosition)
+
+        // T10/C2: 删 `!s.LockedPosition` 守卫. 锁定状态只影响 *用户能否拖动*; 不应阻止
+        // 退出时持久化当前位置. 锁定期间若用户通过拖屏幕外 / OpenSettings 改坐标,
+        // 这些值仍需真实保存. 保留 NaN/Infinity 防御 — WPF 未 laid-out 时 Left/Top
+        // 可能是 NaN, 此时不动 settings, 让下次启动从最近一次有效值恢复.
+        if (_week is { } w)
         {
-            s.WindowLeft = w.Left;
-            s.WindowTop = w.Top;
+            var left = w.Left;
+            var top = w.Top;
+            if (!double.IsNaN(left) && !double.IsInfinity(left) &&
+                !double.IsNaN(top) && !double.IsInfinity(top))
+            {
+                s.WindowLeft = left;
+                s.WindowTop = top;
+            }
+        }
+
+        if (_month is { } mw)
+        {
+            var left = mw.Left;
+            var top = mw.Top;
+            if (!double.IsNaN(left) && !double.IsInfinity(left) &&
+                !double.IsNaN(top) && !double.IsInfinity(top))
+            {
+                s.MonthWindowLeft = left;
+                s.MonthWindowTop = top;
+            }
         }
 
         // Persist DIU window sizes (week + month). NaN stays NaN until the user resizes once.

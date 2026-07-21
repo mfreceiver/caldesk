@@ -86,11 +86,11 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- month grid: 6 equal-height rows (weeks); each row = 7 day cells -->
+            <!-- month grid: 5–6 equal-height rows (weeks); each row = 7 day cells -->
             <ItemsControl Grid.Row="2" ItemsSource="{Binding Month.Weeks}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <UniformGrid Rows="6" Columns="1" VerticalAlignment="Stretch" />
+                        <UniformGrid Rows="{Binding Month.Weeks.Count}" Columns="1" VerticalAlignment="Stretch" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
@@ -136,34 +136,36 @@
                                                     </Style.Triggers>
                                                 </Style>
                                             </Border.Style>
-                                            <Grid IsHitTestVisible="False">
-                                                <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="44" Height="44"
-                                                        CornerRadius="22" Panel.ZIndex="0">
+                                             <Grid IsHitTestVisible="False">
+                                                <!-- Semi-transparent blue circle for today, layered behind the day number text -->
+                                                <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                        Width="44" Height="44" CornerRadius="22"
+                                                        Background="{DynamicResource AccentBrush}"
+                                                        Opacity="0.2"
+                                                        Panel.ZIndex="0">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="Transparent" />
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                                     <Setter Property="Visibility" Value="Visible" />
-                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Border.Style>
-                                                    <TextBlock Text="{Binding Day}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                               FontSize="{DynamicResource FontMonthDate}" FontWeight="Bold"
-                                                               Foreground="{DynamicResource OnAccentBrush}" />
                                                 </Border>
+                                                <!-- Day number text, always visible -->
                                                 <TextBlock Text="{Binding Day}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                            FontSize="{DynamicResource FontMonthDate}" FontWeight="Bold"
-                                                           Foreground="{DynamicResource ForegroundBrush}" Opacity="0.18" Panel.ZIndex="0">
+                                                           Panel.ZIndex="1">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Visible" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+                                                            <Setter Property="Opacity" Value="0.18" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+                                                                    <Setter Property="Opacity" Value="1.0" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
@@ -268,102 +270,112 @@
                                  <ColumnDefinition Width="*" />
                                  <ColumnDefinition Width="*" />
                              </Grid.ColumnDefinitions>
-                             <ItemsControl Grid.Column="0" ItemsSource="{Binding SelectedDay.LeftEvents}">
+                              <ItemsControl Grid.Column="0" ItemsSource="{Binding SelectedDay.LeftEvents}">
 <ItemsControl.ItemTemplate>
-                                 <DataTemplate>
-                                     <Button Style="{StaticResource RowButton}" Margin="0,1"
-                                             Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                             CommandParameter="{Binding EventId}">
-                                         <Border Padding="5,2" Margin="1" CornerRadius="4">
-                                             <Grid>
-                                                 <Grid.RowDefinitions>
-                                                     <RowDefinition Height="Auto" />
-                                                     <RowDefinition Height="Auto" />
-                                                 </Grid.RowDefinitions>
-                                                 <Grid.ColumnDefinitions>
-                                                     <ColumnDefinition Width="Auto" />
-                                                     <ColumnDefinition Width="*" />
-                                                 </Grid.ColumnDefinitions>
-                                                 <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Width="5" Height="5"
-                                                         CornerRadius="2" Margin="0,0,5,0" VerticalAlignment="Top">
-                                                     <Border.Background>
-                                                         <MultiBinding Converter="{StaticResource ColorOrAccent}">
-                                                             <Binding Path="Color" />
-                                                             <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
-                                                         </MultiBinding>
-                                                     </Border.Background>
-                                                 </Border>
-                                                 <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Summary}"
-                                                            FontSize="{DynamicResource FontBody}" TextTrimming="CharacterEllipsis"
-                                                            TextWrapping="NoWrap">
-                                                     <TextBlock.Style>
-                                                         <Style TargetType="TextBlock">
-                                                             <Style.Triggers>
-                                                                 <DataTrigger Binding="{Binding IsOngoing}" Value="True">
-                                                                     <Setter Property="FontWeight" Value="Bold" />
-                                                                     <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
-                                                                 </DataTrigger>
-                                                             </Style.Triggers>
-                                                         </Style>
-                                                     </TextBlock.Style>
-                                                 </TextBlock>
-                                                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TimeRangeLabel}"
-                                                            FontSize="{DynamicResource FontSmall}" Foreground="{DynamicResource AccentBrush}"
-                                                            TextTrimming="CharacterEllipsis" />
-                                             </Grid>
-                                         </Border>
-                                     </Button>
-                                 </DataTemplate>
-                             </ItemsControl.ItemTemplate>
-                             </ItemsControl>
-                             <ItemsControl Grid.Column="1" ItemsSource="{Binding SelectedDay.RightEvents}">
+                                  <DataTemplate>
+                                      <Button Style="{StaticResource RowButton}" Margin="0,1"
+                                              Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding EventId}">
+                                          <Border Padding="5,2" Margin="1" CornerRadius="4">
+                                              <Grid>
+                                                  <Grid.ColumnDefinitions>
+                                                      <ColumnDefinition Width="Auto" />
+                                                      <ColumnDefinition Width="Auto" />
+                                                      <ColumnDefinition Width="*" />
+                                                  </Grid.ColumnDefinitions>
+                                                  <!-- Color dot, vertically centered -->
+                                                  <Border Grid.Column="0" Width="5" Height="5" CornerRadius="2"
+                                                          Margin="0,2,5,2" VerticalAlignment="Center">
+                                                      <Border.Background>
+                                                          <MultiBinding Converter="{StaticResource ColorOrAccent}">
+                                                              <Binding Path="Color" />
+                                                              <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
+                                                          </MultiBinding>
+                                                      </Border.Background>
+                                                  </Border>
+                                                  <!-- Time range -->
+                                                  <TextBlock Grid.Column="1" Text="{Binding TimeRangeLabel}"
+                                                             FontSize="{DynamicResource FontSmall}"
+                                                             Foreground="{DynamicResource AccentBrush}"
+                                                             VerticalAlignment="Center"
+                                                             TextTrimming="CharacterEllipsis"
+                                                             Margin="0,0,6,0" />
+                                                  <!-- Summary -->
+                                                  <TextBlock Grid.Column="2" Text="{Binding Summary}"
+                                                             FontSize="{DynamicResource FontBody}"
+                                                             TextTrimming="CharacterEllipsis"
+                                                             TextWrapping="NoWrap"
+                                                             VerticalAlignment="Center">
+                                                      <TextBlock.Style>
+                                                          <Style TargetType="TextBlock">
+                                                              <Style.Triggers>
+                                                                  <DataTrigger Binding="{Binding IsOngoing}" Value="True">
+                                                                      <Setter Property="FontWeight" Value="Bold" />
+                                                                      <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                                  </DataTrigger>
+                                                              </Style.Triggers>
+                                                          </Style>
+                                                      </TextBlock.Style>
+                                                  </TextBlock>
+                                              </Grid>
+                                          </Border>
+                                      </Button>
+                                  </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                              </ItemsControl>
+                              <ItemsControl Grid.Column="1" ItemsSource="{Binding SelectedDay.RightEvents}">
 <ItemsControl.ItemTemplate>
-                                 <DataTemplate>
-                                     <Button Style="{StaticResource RowButton}" Margin="0,1"
-                                             Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                             CommandParameter="{Binding EventId}">
-                                         <Border Padding="5,2" Margin="1" CornerRadius="4">
-                                             <Grid>
-                                                 <Grid.RowDefinitions>
-                                                     <RowDefinition Height="Auto" />
-                                                     <RowDefinition Height="Auto" />
-                                                 </Grid.RowDefinitions>
-                                                 <Grid.ColumnDefinitions>
-                                                     <ColumnDefinition Width="Auto" />
-                                                     <ColumnDefinition Width="*" />
-                                                 </Grid.ColumnDefinitions>
-                                                 <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Width="5" Height="5"
-                                                         CornerRadius="2" Margin="0,0,5,0" VerticalAlignment="Top">
-                                                     <Border.Background>
-                                                         <MultiBinding Converter="{StaticResource ColorOrAccent}">
-                                                             <Binding Path="Color" />
-                                                             <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
-                                                         </MultiBinding>
-                                                     </Border.Background>
-                                                 </Border>
-                                                 <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Summary}"
-                                                            FontSize="{DynamicResource FontBody}" TextTrimming="CharacterEllipsis"
-                                                            TextWrapping="NoWrap">
-                                                     <TextBlock.Style>
-                                                         <Style TargetType="TextBlock">
-                                                             <Style.Triggers>
-                                                                 <DataTrigger Binding="{Binding IsOngoing}" Value="True">
-                                                                     <Setter Property="FontWeight" Value="Bold" />
-                                                                     <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
-                                                                 </DataTrigger>
-                                                             </Style.Triggers>
-                                                         </Style>
-                                                     </TextBlock.Style>
-                                                 </TextBlock>
-                                                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TimeRangeLabel}"
-                                                            FontSize="{DynamicResource FontSmall}" Foreground="{DynamicResource AccentBrush}"
-                                                            TextTrimming="CharacterEllipsis" />
-                                             </Grid>
-                                         </Border>
-                                     </Button>
-                                 </DataTemplate>
-                             </ItemsControl.ItemTemplate>
-                             </ItemsControl>
+                                  <DataTemplate>
+                                      <Button Style="{StaticResource RowButton}" Margin="0,1"
+                                              Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding EventId}">
+                                          <Border Padding="5,2" Margin="1" CornerRadius="4">
+                                              <Grid>
+                                                  <Grid.ColumnDefinitions>
+                                                      <ColumnDefinition Width="Auto" />
+                                                      <ColumnDefinition Width="Auto" />
+                                                      <ColumnDefinition Width="*" />
+                                                  </Grid.ColumnDefinitions>
+                                                  <!-- Color dot, vertically centered -->
+                                                  <Border Grid.Column="0" Width="5" Height="5" CornerRadius="2"
+                                                          Margin="0,2,5,2" VerticalAlignment="Center">
+                                                      <Border.Background>
+                                                          <MultiBinding Converter="{StaticResource ColorOrAccent}">
+                                                              <Binding Path="Color" />
+                                                              <Binding Source="{StaticResource AccentProxy}" Path="Brush" />
+                                                          </MultiBinding>
+                                                      </Border.Background>
+                                                  </Border>
+                                                  <!-- Time range -->
+                                                  <TextBlock Grid.Column="1" Text="{Binding TimeRangeLabel}"
+                                                             FontSize="{DynamicResource FontSmall}"
+                                                             Foreground="{DynamicResource AccentBrush}"
+                                                             VerticalAlignment="Center"
+                                                             TextTrimming="CharacterEllipsis"
+                                                             Margin="0,0,6,0" />
+                                                  <!-- Summary -->
+                                                  <TextBlock Grid.Column="2" Text="{Binding Summary}"
+                                                             FontSize="{DynamicResource FontBody}"
+                                                             TextTrimming="CharacterEllipsis"
+                                                             TextWrapping="NoWrap"
+                                                             VerticalAlignment="Center">
+                                                      <TextBlock.Style>
+                                                          <Style TargetType="TextBlock">
+                                                              <Style.Triggers>
+                                                                  <DataTrigger Binding="{Binding IsOngoing}" Value="True">
+                                                                      <Setter Property="FontWeight" Value="Bold" />
+                                                                      <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+                                                                  </DataTrigger>
+                                                              </Style.Triggers>
+                                                          </Style>
+                                                      </TextBlock.Style>
+                                                  </TextBlock>
+                                              </Grid>
+                                          </Border>
+                                      </Button>
+                                  </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                              </ItemsControl>
                          </Grid>
 
 

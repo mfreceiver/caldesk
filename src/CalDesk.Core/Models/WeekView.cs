@@ -21,6 +21,9 @@ public sealed class WeekDay
     /// <summary>Saturday or Sunday — drives the weekend shade trigger in the week view.</summary>
     public bool IsWeekend { get; init; }
 
+    /// <summary>0=Monday..6=Sunday, matching <see cref="CalendarDateMath.DaysSinceMonday"/>.</summary>
+    public required int WeekIndex { get; init; }
+
     public bool IsEmpty => AllDay.Count == 0 && Timed.Count == 0;
 
     /// <summary>All-day occurrences (shown first / above timed).</summary>
