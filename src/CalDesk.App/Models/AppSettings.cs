@@ -34,9 +34,6 @@ public sealed class AppSettings
 {
     public WindowMode WindowMode { get; set; } = WindowMode.Normal;
 
-    /// <summary>Window opacity, 0.15–1.0.</summary>
-    public double Opacity { get; set; } = 0.92;
-
     public bool LockedPosition { get; set; }
 
     public bool StartWithWindows { get; set; }

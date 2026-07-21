@@ -33,11 +33,12 @@ public partial class QuickAddWindow : Window
     /// IsCancel on the close/cancel buttons; Enter via IsDefault on Save.)</summary>
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 
-    // DPI crispness flags for the transparent card (per spec §1.3 / T3 DpiHandling).
+    // DPI crispness flags + DWM chrome (T12) — attached once the Win32 hwnd exists.
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
         DpiHandling.Attach(this);
+        DwmAppearance.Apply(new System.Windows.Interop.WindowInteropHelper(this).Handle);
     }
 
     private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject

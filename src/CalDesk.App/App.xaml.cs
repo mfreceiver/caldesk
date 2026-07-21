@@ -126,7 +126,7 @@ public partial class App : Application
             onAddNew: date => _ = OpenQuickAddAsync(date, null),
             onEdit: id => _ = OpenQuickAddAsync(null, id));
         _month = new MonthWindow(_monthVm);
-        // Apply saved size/opacity/lock ONCE at construction; OpenMonth only Show()s afterwards,
+        // Apply saved size/lock ONCE at construction; OpenMonth only Show()s afterwards,
         // so tray hide/reopen preserves the user's in-session resize instead of resetting it.
         ApplyMonthWindowSettings(_month, _settingsSvc.Current);
         _month.Activated += (_, _) => _lastShown = _month;
@@ -260,7 +260,6 @@ public partial class App : Application
     private static void ApplyWindowSettings(WeekWindow w, AppSettings s)
     {
         w.IsPositionLocked = s.LockedPosition;
-        w.Opacity = Math.Clamp(s.Opacity, 0.15, 1.0);
         if (!double.IsNaN(s.WindowLeft))
         {
             w.Left = s.WindowLeft;
@@ -302,7 +301,6 @@ public partial class App : Application
     private static void ApplyMonthWindowSettings(MonthWindow w, AppSettings s)
     {
         w.IsPositionLocked = s.LockedPosition;
-        w.Opacity = Math.Clamp(s.Opacity, 0.15, 1.0);
         // The month window has no persisted position of its own; it opens near the week window.
         // DIU size persistence: restore the user's last resized size (NaN ⇒ keep XAML default).
         if (!double.IsNaN(s.MonthWindowWidth))

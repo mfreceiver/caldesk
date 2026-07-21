@@ -200,7 +200,6 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Margin="0,0,0,6">
@@ -219,20 +218,9 @@
                     </StackPanel>
                 </Grid>
 
-                <Grid Grid.Row="1" Margin="0,0,0,6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="84" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="44" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="透明度" VerticalAlignment="Center" />
-                    <Slider Grid.Column="1" Minimum="0.15" Maximum="1.0" Value="{Binding Opacity}" TickFrequency="0.05" />
-                    <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat=P0}" VerticalAlignment="Center" />
-                </Grid>
-
-                <CheckBox Grid.Row="2" Content="锁定位置（仅桌面底层模式生效）" Margin="0,0,0,4"
+                <CheckBox Grid.Row="1" Content="锁定位置（仅桌面底层模式生效）" Margin="0,0,0,4"
                           IsChecked="{Binding LockedPosition}" IsEnabled="{Binding IsLockPositionEnabled}" />
-                <CheckBox Grid.Row="3" Content="开机启动" IsChecked="{Binding StartWithWindows}" />
+                <CheckBox Grid.Row="2" Content="开机启动" IsChecked="{Binding StartWithWindows}" />
             </Grid>
         </GroupBox>
 

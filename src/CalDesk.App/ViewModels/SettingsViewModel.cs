@@ -50,7 +50,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsLockPositionEnabled))]
     private WindowMode _windowMode = WindowMode.Normal;
 
-    [ObservableProperty] private double _opacity = 0.92;
     [ObservableProperty] private bool _lockedPosition;
     [ObservableProperty] private bool _startWithWindows;
 
@@ -119,7 +118,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         SyncIntervalMinutes = _settings.SyncIntervalMinutes;
 
         WindowMode = _settings.WindowMode;
-        Opacity = _settings.Opacity;
         LockedPosition = _settings.LockedPosition;
         StartWithWindows = _settings.StartWithWindows;
 
@@ -322,7 +320,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             await SaveCalendarRowsAsync();
 
             _settings.WindowMode = WindowMode;
-            _settings.Opacity = Math.Clamp(Opacity, 0.15, 1.0);
             // Lock position only applies in Desktop-bottom mode.
             _settings.LockedPosition = WindowMode == WindowMode.Desktop && LockedPosition;
             _settings.StartWithWindows = StartWithWindows;

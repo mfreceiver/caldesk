@@ -65,12 +65,13 @@ public partial class MonthWindow : Window
 
     private void OnBackToWeek(object sender, RoutedEventArgs e) => BackRequested?.Invoke();
 
-    // Borderless-resize (WM_NCHITTEST) + DPI crispness flags are attached once the Win32 hwnd exists.
+    // Borderless-resize (WM_NCHITTEST) + DPI + DWM chrome (T12; BorderlessResize kept until T13).
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
         BorderlessResize.Attach(this);
         DpiHandling.Attach(this);
+        DwmAppearance.Apply(new System.Windows.Interop.WindowInteropHelper(this).Handle);
     }
 
     // Closing hides to the tray (app stays alive via tray icon), matching the week window.
