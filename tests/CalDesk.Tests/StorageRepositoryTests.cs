@@ -641,4 +641,240 @@ public sealed class StorageRepositoryTests
             CleanupDb(path);
         }
     }
+
+    // ---- 8. lightweight projection (T7) ---------------------------------------
+    //
+    // T7 design: GetInRangeAsync stays full-weight (ReminderService needs icalendar_data for
+    // VALARM parsing on EVERY event + for recurrence expansion). Two new methods serve the display
+    // path: GetInRangeLightweightAsync (skips icalendar_data) + GetRecurringDataAsync (batch
+    // backfill by ID). Display VMs do two-phase: lightweight, then backfill only recurring IDs.
+
+    /// <summary>Inserts a non-recurring event (with a VALARM + non-trivial icalendar_data) and a
+    /// recurring weekly event, both overlapping 2026-07-15. Returns the inserted events so tests
+    /// can cross-check IDs / fields / ICalendarData.</summary>
+    private static async Task<(CalendarEvent NonRecur, CalendarEvent Recur)> InsertMixedFixtureAsync(
+        StorageServices svc, Guid calendarId)
+    {
+        var nonRecur = new CalendarEvent
+        {
+            Id = Guid.NewGuid(),
+            CalendarId = calendarId,
+            Uid = "non-recur@example",
+            Summary = "Standup",
+            StartUtc = new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero),
+            EndUtc = new DateTimeOffset(2026, 7, 15, 11, 0, 0, TimeSpan.Zero),
+            // Non-trivial raw payload WITH a VALARM — ReminderService.ParseTriggerMinutes reads
+            // this regardless of whether the event recurs, so ReminderService must keep using the
+            // full-weight GetInRangeAsync (regression-guarded below).
+            ICalendarData = """
+            BEGIN:VCALENDAR
+            BEGIN:VEVENT
+            UID:non-recur@example
+            SUMMARY:Standup
+            BEGIN:VALARM
+            TRIGGER:-PT15M
+            ACTION:DISPLAY
+            DESCRIPTION:standup soon
+            END:VALARM
+            END:VEVENT
+            END:VCALENDAR
+            """,
+            SyncStatus = SyncStatus.Clean,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        await svc.Events.UpsertAsync(nonRecur);
+
+        var recur = new CalendarEvent
+        {
+            Id = Guid.NewGuid(),
+            CalendarId = calendarId,
+            Uid = "recur@example",
+            Summary = "Weekly review",
+            StartUtc = new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.Zero),
+            EndUtc = new DateTimeOffset(2026, 1, 1, 9, 30, 0, TimeSpan.Zero),
+            IsAllDay = false,
+            RecurrenceRule = "FREQ=WEEKLY;BYDAY=MO",
+            // Non-trivial raw payload — IcalRecurrenceExpander needs this to expand the RRULE.
+            ICalendarData = """
+            BEGIN:VCALENDAR
+            BEGIN:VEVENT
+            UID:recur@example
+            SUMMARY:Weekly review
+            RRULE:FREQ=WEEKLY;BYDAY=MO
+            DTSTART:20260101T090000Z
+            DTEND:20260101T093000Z
+            END:VEVENT
+            END:VCALENDAR
+            """,
+            SyncStatus = SyncStatus.Clean,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        await svc.Events.UpsertAsync(recur);
+
+        return (nonRecur, recur);
+    }
+
+    /// <summary>T7-C1: GetInRangeLightweightAsync returns events with ICalendarData == "" for BOTH
+    /// recurring and non-recurring events (the icalendar_data column is not SELECTed).</summary>
+    [Fact]
+    public async Task GetInRangeLightweightAsync_OmitsIcalendarData_ForBothRecurringAndNonRecurring()
+    {
+        var (_, svc, path, _, calendarId) = await SetupWithCalendarAsync();
+        try
+        {
+            var (nonRecur, recur) = await InsertMixedFixtureAsync(svc, calendarId);
+            var rangeStart = new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
+            var rangeEnd = new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero);
+
+            var lightweight = await svc.Events.GetInRangeLightweightAsync(new[] { calendarId }, rangeStart, rangeEnd);
+            Assert.Equal(2, lightweight.Count);
+
+            // T7-C1: neither event carries ICalendarData — the lightweight projection must not SELECT
+            // that column. MapLight leaves ICalendarData at the CalendarEvent default of "".
+            foreach (var e in lightweight)
+            {
+                Assert.Equal(string.Empty, e.ICalendarData);
+            }
+
+            // Other denormalized fields are still mapped (sanity).
+            var nonRecurLw = lightweight.Single(e => e.Id == nonRecur.Id);
+            Assert.Equal("Standup", nonRecurLw.Summary);
+            Assert.Equal(nonRecur.StartUtc, nonRecurLw.StartUtc);
+            Assert.False(nonRecurLw.IsRecurring);
+
+            var recurLw = lightweight.Single(e => e.Id == recur.Id);
+            Assert.True(recurLw.IsRecurring);
+            Assert.Equal("FREQ=WEEKLY;BYDAY=MO", recurLw.RecurrenceRule);
+        }
+        finally
+        {
+            CleanupDb(path);
+        }
+    }
+
+    /// <summary>GetInRangeLightweightAsync must use the SAME WHERE clause as GetInRangeAsync so the
+    /// display path sees the same event set (just without icalendar_data).</summary>
+    [Fact]
+    public async Task GetInRangeLightweightAsync_ReturnsSameEventSetAs_GetInRangeAsync()
+    {
+        var (_, svc, path, _, calendarId) = await SetupWithCalendarAsync();
+        try
+        {
+            await InsertMixedFixtureAsync(svc, calendarId);
+            var rangeStart = new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
+            var rangeEnd = new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero);
+
+            var full = await svc.Events.GetInRangeAsync(new[] { calendarId }, rangeStart, rangeEnd);
+            var lightweight = await svc.Events.GetInRangeLightweightAsync(new[] { calendarId }, rangeStart, rangeEnd);
+
+            // Same WHERE clause → same event IDs in the same order.
+            Assert.Equal(full.Select(e => e.Id).ToArray(), lightweight.Select(e => e.Id).ToArray());
+        }
+        finally
+        {
+            CleanupDb(path);
+        }
+    }
+
+    /// <summary>GetRecurringDataAsync: empty input returns empty dict (no SQL). Non-empty returns
+    /// the stored icalendar_data keyed by id. Keyed by REQUESTED id, not by IsRecurring — the
+    /// caller is responsible for filtering to recurring IDs (the display path does this).</summary>
+    [Fact]
+    public async Task GetRecurringDataAsync_ReturnsOnlyRequestedIds_AndEmptyForNoIds()
+    {
+        var (_, svc, path, _, calendarId) = await SetupWithCalendarAsync();
+        try
+        {
+            var (nonRecur, recur) = await InsertMixedFixtureAsync(svc, calendarId);
+
+            // Empty input → empty dictionary (no SQL executed).
+            var empty = await svc.Events.GetRecurringDataAsync(Array.Empty<Guid>());
+            Assert.Empty(empty);
+
+            // Request just the recurring id.
+            var onlyRecur = await svc.Events.GetRecurringDataAsync(new[] { recur.Id });
+            Assert.Single(onlyRecur);
+            Assert.Equal(recur.ICalendarData, onlyRecur[recur.Id]);
+
+            // Request both — both rows have icalendar_data in storage, so both are returned.
+            // (Display path only passes recurring IDs, so this over-fetch never happens in prod.)
+            var both = await svc.Events.GetRecurringDataAsync(new[] { nonRecur.Id, recur.Id });
+            Assert.Equal(2, both.Count);
+            Assert.Equal(nonRecur.ICalendarData, both[nonRecur.Id]);
+            Assert.Equal(recur.ICalendarData, both[recur.Id]);
+        }
+        finally
+        {
+            CleanupDb(path);
+        }
+    }
+
+    /// <summary>T7-C2: after two-phase load (lightweight + GetRecurringDataAsync backfill of
+    /// recurring IDs), the resulting events' ICalendarData must match the full-weight
+    /// GetInRangeAsync output for recurring events. Non-recurring events stay at "" (the display
+    /// path doesn't need their VALARM — ReminderService handles that separately via the full-weight
+    /// path).</summary>
+    [Fact]
+    public async Task Lightweight_BackfilledWithRecurringData_MatchesFullGetInRange_ForRecurring()
+    {
+        var (_, svc, path, _, calendarId) = await SetupWithCalendarAsync();
+        try
+        {
+            var (nonRecur, recur) = await InsertMixedFixtureAsync(svc, calendarId);
+            var rangeStart = new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
+            var rangeEnd = new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero);
+
+            // Full-weight reference (ReminderService path).
+            var full = await svc.Events.GetInRangeAsync(new[] { calendarId }, rangeStart, rangeEnd);
+
+            // Two-phase display path.
+            var lightweight = await svc.Events.GetInRangeLightweightAsync(new[] { calendarId }, rangeStart, rangeEnd);
+            var recurringIds = lightweight.Where(e => e.IsRecurring).Select(e => e.Id).ToArray();
+            Assert.Single(recurringIds);  // sanity: only the RRULE event is recurring
+            var datas = await svc.Events.GetRecurringDataAsync(recurringIds);
+            foreach (var e in lightweight)
+                if (datas.TryGetValue(e.Id, out var d))
+                    e.ICalendarData = d;
+
+            // T7-C2: after backfill, recurring event's ICalendarData matches the full-weight path;
+            // the non-recurring event's ICalendarData stays at "" (display path skips it on purpose).
+            var lwRecur = lightweight.Single(e => e.Id == recur.Id);
+            var lwNonRecur = lightweight.Single(e => e.Id == nonRecur.Id);
+            Assert.Equal(full.Single(e => e.Id == recur.Id).ICalendarData, lwRecur.ICalendarData);
+            Assert.Equal(string.Empty, lwNonRecur.ICalendarData);
+        }
+        finally
+        {
+            CleanupDb(path);
+        }
+    }
+
+    /// <summary>T7 regression guard: the full-weight GetInRangeAsync (ReminderService path) MUST
+    /// still SELECT and return icalendar_data — that method is unchanged by T7. ReminderService's
+    /// ParseTriggerMinutes reads evt.ICalendarData on EVERY event (not just recurring), and
+    /// IcalRecurrenceExpander.Expand needs it for recurrence expansion.</summary>
+    [Fact]
+    public async Task GetInRangeAsync_StillReturnsFullIcalendarData_NoRegression()
+    {
+        var (_, svc, path, _, calendarId) = await SetupWithCalendarAsync();
+        try
+        {
+            var (nonRecur, _) = await InsertMixedFixtureAsync(svc, calendarId);
+            var rangeStart = new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
+            var rangeEnd = new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero);
+
+            var full = await svc.Events.GetInRangeAsync(new[] { calendarId }, rangeStart, rangeEnd);
+            var nonRecurFull = full.Single(e => e.Id == nonRecur.Id);
+            Assert.Equal(nonRecur.ICalendarData, nonRecurFull.ICalendarData);
+            // ReminderService reads VALARM from non-recurring events too — the raw payload survives.
+            Assert.Contains("VALARM", nonRecurFull.ICalendarData);
+            Assert.Contains("TRIGGER:-PT15M", nonRecurFull.ICalendarData);
+        }
+        finally
+        {
+            CleanupDb(path);
+        }
+    }
 }

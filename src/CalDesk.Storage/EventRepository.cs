@@ -18,6 +18,16 @@ internal sealed class EventRepository : IEventRepository
         recurrence_rule, recurrence_id, sync_status, deleted_at, created_at, updated_at
         """;
 
+    /// <summary>T7: lightweight projection — same columns as <see cref="SelectColumns"/> MINUS
+    /// <c>icalendar_data</c>. Used by <see cref="GetInRangeLightweightAsync"/> for the display path
+    /// so the heavy raw iCalendar payload is skipped for every event (recurring payloads are
+    /// backfilled separately via <see cref="GetRecurringDataAsync"/>).</summary>
+    private const string LightweightColumns = """
+        id, calendar_id, uid, remote_href, etag, summary, description,
+        location, is_all_day, start_utc, end_utc, time_zone_id, is_floating,
+        recurrence_rule, recurrence_id, sync_status, deleted_at, created_at, updated_at
+        """;
+
     public async Task<CalendarEvent?> GetAsync(Guid id, CancellationToken ct = default)
     {
         await using var lease = await _db.LeaseCommandAsync();
@@ -70,7 +80,97 @@ internal sealed class EventRepository : IEventRepository
         await using var lease = await _db.LeaseCommandAsync();
         await using var cmd = lease.CreateCommand();
 
-        // Build the IN(...) list with dynamic parameter names.
+        var sb = new StringBuilder();
+        sb.Append("SELECT ").Append(SelectColumns).Append(" FROM events ");
+        BuildInRangeWhere(cmd, calendarIds, startUtc, endUtc, sb);
+        sb.Append(" ORDER BY start_utc");
+
+        cmd.CommandText = sb.ToString();
+
+        var results = new List<CalendarEvent>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            results.Add(Map(reader));
+        return results;
+    }
+
+    /// <summary>T7: lightweight display-path query — identical WHERE/ORDER to
+    /// <see cref="GetInRangeAsync"/> but SELECTs <see cref="LightweightColumns"/> (no
+    /// <c>icalendar_data</c>) and maps via <see cref="MapLight"/> (which leaves
+    /// <see cref="CalendarEvent.ICalendarData"/> at the default ""). Recurring events returned here
+    /// cannot be expanded until the caller backfills via <see cref="GetRecurringDataAsync"/>.</summary>
+    public async Task<IReadOnlyList<CalendarEvent>> GetInRangeLightweightAsync(
+        IReadOnlyCollection<Guid> calendarIds,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken ct = default)
+    {
+        if (calendarIds.Count == 0)
+            return Array.Empty<CalendarEvent>();
+
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+
+        var sb = new StringBuilder();
+        sb.Append("SELECT ").Append(LightweightColumns).Append(" FROM events ");
+        BuildInRangeWhere(cmd, calendarIds, startUtc, endUtc, sb);
+        sb.Append(" ORDER BY start_utc");
+
+        cmd.CommandText = sb.ToString();
+
+        var results = new List<CalendarEvent>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            results.Add(MapLight(reader));
+        return results;
+    }
+
+    /// <summary>T7: batch fetch of <c>icalendar_data</c> by event ID. Empty input short-circuits
+    /// (no SQL). Used by display VMs to backfill the recurring subset after a lightweight range
+    /// query. Keyed by requested ID; rows missing from storage are simply absent from the result.</summary>
+    public async Task<IReadOnlyDictionary<Guid, string>> GetRecurringDataAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+
+        var idParams = new List<string>(ids.Count);
+        int i = 0;
+        foreach (var id in ids)
+        {
+            var name = $"@id{i++}";
+            idParams.Add(name);
+            cmd.Parameters.AddWithValue(name, DbConvert.ToText(id));
+        }
+
+        cmd.CommandText = "SELECT id, icalendar_data FROM events WHERE id IN ("
+                          + string.Join(", ", idParams) + ")";
+
+        var result = new Dictionary<Guid, string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var id = DbConvert.ToGuid(reader["id"]);
+            result[id] = DbConvert.StringOrEmpty(reader["icalendar_data"]);
+        }
+        return result;
+    }
+
+    /// <summary>Shared WHERE-clause builder for <see cref="GetInRangeAsync"/> and
+    /// <see cref="GetInRangeLightweightAsync"/> — guarantees the two queries match (T7-C1: same
+    /// event set, just different column projection). Appends the WHERE fragment to
+    /// <paramref name="sb"/> and adds the calendar-id / range parameters to <paramref name="cmd"/>.</summary>
+    private static void BuildInRangeWhere(
+        SqliteCommand cmd,
+        IReadOnlyCollection<Guid> calendarIds,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        StringBuilder sb)
+    {
         var idParams = new List<string>(calendarIds.Count);
         int i = 0;
         foreach (var cid in calendarIds)
@@ -80,23 +180,13 @@ internal sealed class EventRepository : IEventRepository
             cmd.Parameters.AddWithValue(name, DbConvert.ToText(cid));
         }
 
-        var sb = new StringBuilder();
-        sb.Append("SELECT ").Append(SelectColumns).Append(" FROM events ");
         sb.Append("WHERE deleted_at IS NULL AND sync_status != 'DeletedLocal' ");
         sb.Append("  AND calendar_id IN (").Append(string.Join(", ", idParams)).Append(") ");
         sb.Append("  AND ( (recurrence_rule IS NULL AND end_utc > @start AND start_utc < @end) ");
-        sb.Append("        OR (recurrence_rule IS NOT NULL AND start_utc < @end) ) ");
-        sb.Append("ORDER BY start_utc");
+        sb.Append("        OR (recurrence_rule IS NOT NULL AND start_utc < @end) )");
 
-        cmd.CommandText = sb.ToString();
         cmd.Parameters.AddWithValue("@start", DbConvert.ToTimestamp(startUtc));
         cmd.Parameters.AddWithValue("@end", DbConvert.ToTimestamp(endUtc));
-
-        var results = new List<CalendarEvent>();
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
-            results.Add(Map(reader));
-        return results;
     }
 
     public async Task<IReadOnlyList<CalendarEvent>> GetPendingSyncAsync(CancellationToken ct = default)
@@ -221,6 +311,34 @@ internal sealed class EventRepository : IEventRepository
         RemoteHref = DbConvert.NullableString(r["remote_href"]),
         ETag = DbConvert.NullableString(r["etag"]),
         ICalendarData = DbConvert.StringOrEmpty(r["icalendar_data"]),
+        Summary = DbConvert.StringOrEmpty(r["summary"]),
+        Description = DbConvert.NullableString(r["description"]),
+        Location = DbConvert.NullableString(r["location"]),
+        IsAllDay = DbConvert.ToBool(r["is_all_day"]),
+        StartUtc = DbConvert.ToDateTimeOffset(r["start_utc"]),
+        EndUtc = DbConvert.ToDateTimeOffset(r["end_utc"]),
+        TimeZoneId = DbConvert.NullableString(r["time_zone_id"]),
+        IsFloating = DbConvert.ToBool(r["is_floating"]),
+        RecurrenceRule = DbConvert.NullableString(r["recurrence_rule"]),
+        RecurrenceId = DbConvert.NullableString(r["recurrence_id"]),
+        SyncStatus = DbConvert.TextToEnum<SyncStatus>(r["sync_status"]),
+        DeletedAt = DbConvert.ToNullableDateTimeOffset(r["deleted_at"]),
+        CreatedAt = DbConvert.ToDateTimeOffset(r["created_at"]),
+        UpdatedAt = DbConvert.ToDateTimeOffset(r["updated_at"]),
+    };
+
+    /// <summary>T7: same as <see cref="Map"/> but does NOT read the <c>icalendar_data</c> column
+    /// (which is not present in the <see cref="LightweightColumns"/> projection).
+    /// <see cref="CalendarEvent.ICalendarData"/> stays at its default "" — callers that need it
+    /// (the recurrence expander) must backfill via <see cref="GetRecurringDataAsync"/>.</summary>
+    private static CalendarEvent MapLight(SqliteDataReader r) => new()
+    {
+        Id = DbConvert.ToGuid(r["id"]),
+        CalendarId = DbConvert.ToGuid(r["calendar_id"]),
+        Uid = DbConvert.StringOrEmpty(r["uid"]),
+        RemoteHref = DbConvert.NullableString(r["remote_href"]),
+        ETag = DbConvert.NullableString(r["etag"]),
+        // ICalendarData intentionally NOT read — left at default "" (T7-C1).
         Summary = DbConvert.StringOrEmpty(r["summary"]),
         Description = DbConvert.NullableString(r["description"]),
         Location = DbConvert.NullableString(r["location"]),

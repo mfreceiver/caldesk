@@ -132,7 +132,9 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
         var allCals = await _store.Calendars.GetAllAsync();
         var calMap = allCals.ToDictionary(c => c.Id);
         var selectedIds = allCals.Where(c => c.IsSelected).Select(c => c.Id).ToArray();
-        var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
+        // T7: two-phase display-path load — lightweight columns (no icalendar_data) + on-demand
+        // recurring backfill, centralised in EventRepositoryDisplayExtensions.GetInRangeForDisplayAsync.
+        var stored = await _store.Events.GetInRangeForDisplayAsync(selectedIds, rangeStart, rangeEnd);
 
         var today = DateOnly.FromDateTime(DateTime.Today);
         var nowUtc = DateTimeOffset.UtcNow;
@@ -218,7 +220,9 @@ public sealed partial class MonthViewModel : ObservableObject, IRecipient<Calend
         var allCals = await _store.Calendars.GetAllAsync();
         var calMap = allCals.ToDictionary(c => c.Id);
         var selectedIds = allCals.Where(c => c.IsSelected).Select(c => c.Id).ToArray();
-        var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
+        // T7: two-phase display-path load (slow path typically fetches 0-1 recurring events; same
+        // helper as LoadAsync for consistency).
+        var stored = await _store.Events.GetInRangeForDisplayAsync(selectedIds, rangeStart, rangeEnd);
         var built = await Task.Run(() => _viewService.BuildDay(stored, calMap, date, tz, today, nowUtc));
         if (ver != Volatile.Read(ref _selectionVersion))
             return;

@@ -80,7 +80,9 @@ public sealed partial class WeekViewModel : ObservableObject, IRecipient<Calenda
         var allCals = await _store.Calendars.GetAllAsync();
         var calMap = allCals.ToDictionary(c => c.Id);
         var selectedIds = allCals.Where(c => c.IsSelected).Select(c => c.Id).ToArray();
-        var stored = await _store.Events.GetInRangeAsync(selectedIds, rangeStart, rangeEnd);
+        // T7: two-phase display-path load — lightweight columns (no icalendar_data) + on-demand
+        // recurring backfill, centralised in EventRepositoryDisplayExtensions.GetInRangeForDisplayAsync.
+        var stored = await _store.Events.GetInRangeForDisplayAsync(selectedIds, rangeStart, rangeEnd);
 
         // T4: capture all BuildWeek inputs on the UI thread, then run the pure compute off-thread.
         // BuildWeek is pure data (POCO WeekView, no WPF objects, no shared mutable state — T4-C4).

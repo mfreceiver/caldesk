@@ -307,6 +307,16 @@ public sealed class SyncEngineUnitTests
         public Task<IReadOnlyList<CalendarEvent>> GetInRangeAsync(IReadOnlyCollection<Guid> calendarIds, DateTimeOffset s, DateTimeOffset e, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<CalendarEvent>>(_byId.Values.Where(x => calendarIds.Contains(x.CalendarId)).ToList());
 
+        // T7: lightweight display-path stubs. The sync-engine tests don't exercise display paths,
+        // so these mirror the full GetInRangeAsync behaviour (the fake doesn't actually save space
+        // by skipping icalendar_data — the real repository does).
+        public Task<IReadOnlyList<CalendarEvent>> GetInRangeLightweightAsync(IReadOnlyCollection<Guid> calendarIds, DateTimeOffset s, DateTimeOffset e, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<CalendarEvent>>(_byId.Values.Where(x => calendarIds.Contains(x.CalendarId)).ToList());
+
+        public Task<IReadOnlyDictionary<Guid, string>> GetRecurringDataAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyDictionary<Guid, string>>(
+                _byId.Where(kv => ids.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value.ICalendarData ?? string.Empty));
+
         public Task<IReadOnlyList<CalendarEvent>> GetPendingSyncAsync(CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<CalendarEvent>>(Array.Empty<CalendarEvent>());
 
