@@ -7,7 +7,7 @@
         Title="关于 CalDesk" Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Icon="pack://application:,,,/Assets/app.ico"
-        FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}">
+         FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}" Foreground="{DynamicResource ForegroundBrush}">
     <Grid Margin="22,18,22,18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

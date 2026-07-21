@@ -10,7 +10,7 @@
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         WindowStyle="None" AllowsTransparency="False" Background="{DynamicResource SurfaceBrush}"
         ShowInTaskbar="False"
-        FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}">
+         FontFamily="{DynamicResource AppFont}" FontSize="{DynamicResource FontBase}" Foreground="{DynamicResource ForegroundBrush}">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
                             ResizeBorderThickness="6"

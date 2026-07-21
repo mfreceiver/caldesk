@@ -10,7 +10,7 @@
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
         Title="设置" Width="540" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}">
+         FontFamily="Microsoft YaHei UI" FontSize="{DynamicResource FontBase}" Foreground="{DynamicResource ForegroundBrush}">
     <Window.Resources>
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:EqualsConverter x:Key="EqualsConv" />
