@@ -31,6 +31,17 @@ public partial class App : Application
     private Window? _lastShown;
     private SystemThemeWatcher? _themeWatcher;
 
+    // T13/A4+B3: 统一 resize 机制 + resize-session 协调器. 每窗口一个 ResizeSession,
+    // 通过 HwndSource hook 监听 WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE 精确检测 resize
+    // 边沿; 期间 SizeChanged 走 200ms DispatcherTimer 去抖, 不每像素落盘.
+    private ResizeSession? _weekResize;
+    private ResizeSession? _monthResize;
+
+    /// <summary>T13/B3: SyncCompleted 在 resize 期间被 defer — 此标志在 resize 中记录
+    /// "有未处理的 sync 完成", resize 结束时由 <see cref="OnAnyResizeEnded"/> 合并触发一次.
+    /// 不会丢失最后一次 sync 完成事件.</summary>
+    private bool _pendingSyncRefresh;
+
     // Tray icon is a H.NotifyIcon.Wpf TaskbarIcon declared in App.xaml resources.
     // Accessed dynamically to avoid binding the build to its exact API surface.
     private object? _tray;
@@ -87,14 +98,7 @@ public partial class App : Application
         StartupLog.Log("OnStartup: core services built");
 
         _sync = new SyncRunner(_store, _factory, _settingsSvc.Current);
-        _sync.SyncCompleted += (_, _) => _week?.Dispatcher.InvokeAsync(() =>
-        {
-            _ = _vm.LoadAsync();
-            if (_monthVm is not null)
-            {
-                _ = _monthVm.LoadAsync();
-            }
-        });
+        _sync.SyncCompleted += (_, _) => _week?.Dispatcher.InvokeAsync(HandleSyncCompleted);
         _sync.Start();
         StartupLog.Log("OnStartup: SyncRunner started (first sync ~T+3s)");
 
@@ -109,14 +113,13 @@ public partial class App : Application
         _week = new WeekWindow(_vm);
         _week.Activated += (_, _) => _lastShown = _week;
         ApplyWindowSettings(_week, _settingsSvc.Current);
-        _week.SizeChanged += (_, _) =>
-        {
-            // Keep settings current in-memory so any later Save (OpenMonth/BackToWeek/OnExit)
-            // captures the live size; Hide/Show already preserves it across tray toggles.
-            var c = _settingsSvc.Current;
-            c.WindowWidth = _week.Width;
-            c.WindowHeight = _week.Height;
-        };
+        // T13/A4+B3: SizeChanged → ResizeSession.ScheduleUpdate. 该方法在 resize session
+        // 期间（WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE）只 restart 200ms debounce timer，避免
+        // 每像素写 settings.json；debounce 到期 / resize 结束 / 非 resize 的一次性事件
+        // 才会走 onCommit 真正 Save。
+        _week.SizeChanged += (_, _) => _weekResize?.ScheduleUpdate();
+        // ResizeSession 必须在 HWND 存在后创建（OnSourceInitialized 之后）。
+        _week.SourceInitialized += (_, _) => AttachWeekResizeSession();
         StartupLog.Log("OnStartup: WeekWindow constructed");
         _week.ApplyGadgetStyles();
         ApplyWindowMode(_week, _settingsSvc.Current);
@@ -130,12 +133,9 @@ public partial class App : Application
         // so tray hide/reopen preserves the user's in-session resize instead of resetting it.
         ApplyMonthWindowSettings(_month, _settingsSvc.Current);
         _month.Activated += (_, _) => _lastShown = _month;
-        _month.SizeChanged += (_, _) =>
-        {
-            var c = _settingsSvc.Current;
-            c.MonthWindowWidth = _month.Width;
-            c.MonthWindowHeight = _month.Height;
-        };
+        // T13: 同 WeekWindow — SizeChanged 走 ResizeSession.ScheduleUpdate 去抖落盘。
+        _month.SizeChanged += (_, _) => _monthResize?.ScheduleUpdate();
+        _month.SourceInitialized += (_, _) => AttachMonthResizeSession();
         _month.BackRequested += BackToWeek;
         _week.MonthRequested += OpenMonth;
         StartupLog.Log("OnStartup: MonthWindow constructed");
@@ -200,6 +200,106 @@ public partial class App : Application
 
         TaskScheduler.UnobservedTaskException += (_, args) =>
             StartupLog.Log(args.Exception, "TaskScheduler.UnobservedTaskException");
+    }
+
+    // --- T13/A4+B3: resize session 协调器 + SyncCompleted defer 合并刷新 ---
+
+    /// <summary>绑定 <see cref="WeekWindow"/> 的 <c>SourceInitialized</c>，HWND 存在后
+    /// 立即创建 <see cref="ResizeSession"/> 并订阅 <c>ResizeEnded</c>。幂等：重复调用
+    /// 不会重建 session（避免拖动 / 重新 Show 触发重复订阅）。</summary>
+    private void AttachWeekResizeSession()
+    {
+        if (_weekResize != null || _week is null) return;
+        _weekResize = new ResizeSession(
+            _week,
+            onUpdate: UpdateWeekSizeInMemory,
+            onCommit: SaveWeekSizeToDisk);
+        _weekResize.ResizeEnded += OnAnyResizeEnded;
+    }
+
+    /// <summary>绑定 <see cref="MonthWindow"/> 的 <c>SourceInitialized</c>，同上。</summary>
+    private void AttachMonthResizeSession()
+    {
+        if (_monthResize != null || _month is null) return;
+        _monthResize = new ResizeSession(
+            _month,
+            onUpdate: UpdateMonthSizeInMemory,
+            onCommit: SaveMonthSizeToDisk);
+        _monthResize.ResizeEnded += OnAnyResizeEnded;
+    }
+
+    private void UpdateWeekSizeInMemory(double w, double h)
+    {
+        var c = _settingsSvc.Current;
+        c.WindowWidth = w;
+        c.WindowHeight = h;
+    }
+
+    private void UpdateMonthSizeInMemory(double w, double h)
+    {
+        var c = _settingsSvc.Current;
+        c.MonthWindowWidth = w;
+        c.MonthWindowHeight = h;
+    }
+
+    private void SaveWeekSizeToDisk(double w, double h)
+    {
+        var c = _settingsSvc.Current;
+        c.WindowWidth = w;
+        c.WindowHeight = h;
+        _settingsSvc.Save(c);
+    }
+
+    private void SaveMonthSizeToDisk(double w, double h)
+    {
+        var c = _settingsSvc.Current;
+        c.MonthWindowWidth = w;
+        c.MonthWindowHeight = h;
+        _settingsSvc.Save(c);
+    }
+
+    /// <summary>任一窗口 resize 结束 (WM_EXITSIZEMOVE) 触发。若 resize 期间收到过
+    /// <see cref="SyncCompleted"/> 且被 defer，合并触发一次刷新 — 不丢失最后一次
+    /// 同步完成事件，但也不在 resize 中与每像素落盘抢 UI 线程。
+    /// <para><b>rev-grok 修复：</b> 另一窗口可能仍在 resize。重新检查
+    /// <see cref="AnyResizing"/>；若仍为 true（说明另一窗口 resize session 未结束），
+    /// 保留 <c>_pendingSyncRefresh = true</c> 直接 return — 等待另一窗口也结束，
+    /// 避免提前刷新导致 sync 期间再被窗口 resize 干扰。</para>
+    /// </summary>
+    private void OnAnyResizeEnded()
+    {
+        if (!_pendingSyncRefresh) return;
+        // 另一窗口可能仍在 resize (e.g. Week 结束但 Month 还在拖): 重新检查
+        // AnyResizing 仍为 true, 保留 pending, 等 Month 也结束再合并触发.
+        if (AnyResizing) return;
+        _pendingSyncRefresh = false;
+        DoRefreshAfterSync();
+    }
+
+    /// <summary>UI 线程的 <see cref="SyncRunner.SyncCompleted"/> 入口。resize 期间
+    /// 不直接触发 LoadAsync（避免与每像素 SizeChanged 抢线程），仅标记 pending；
+    /// 由 <see cref="OnAnyResizeEnded"/> 合并触发一次。</summary>
+    private void HandleSyncCompleted()
+    {
+        if (AnyResizing)
+        {
+            _pendingSyncRefresh = true;
+            return;
+        }
+        DoRefreshAfterSync();
+    }
+
+    /// <summary>任一窗口当前在 user-driven resize 拖动 session 中。</summary>
+    private bool AnyResizing =>
+        (_weekResize is { IsResizing: true }) || (_monthResize is { IsResizing: true });
+
+    private void DoRefreshAfterSync()
+    {
+        _ = _vm.LoadAsync();
+        if (_monthVm is not null)
+        {
+            _ = _monthVm.LoadAsync();
+        }
     }
 
     /// <summary>Swap the merged FontSizes dictionary for S/M/L (DynamicResource so all bound
@@ -529,6 +629,11 @@ public partial class App : Application
         _themeWatcher?.Dispose();
         _reminders?.Dispose();
         _sync?.Dispose();
+        // T13: 释放 ResizeSession — stop debounce timer + RemoveHook HwndSource.
+        // 必须在窗口销毁之前; OnExit 时窗口可能已被 GC/进程退出, 但 HwndSource 仍
+        // 可访问, RemoveHook 失败有 try/catch 兜底.
+        _weekResize?.Dispose();
+        _monthResize?.Dispose();
         try
         {
             (_tray as TaskbarIcon)?.Dispose();

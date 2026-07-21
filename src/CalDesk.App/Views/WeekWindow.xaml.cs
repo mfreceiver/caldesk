@@ -75,7 +75,13 @@ public partial class WeekWindow : Window
 
     private void OnMonth(object sender, RoutedEventArgs e) => MonthRequested?.Invoke();
 
-    // Borderless-resize (WM_NCHITTEST) + DPI + DWM chrome (spike T7S; BorderlessResize kept until T13).
+    // T12 (WindowChrome) + T13 (ResizeSession 协调器) + BorderlessResize (WM_NCHITTEST).
+    // T13-C5 决策: 保留 BorderlessResize.Attach — 见 docs/ocmar/ledgers/2026-07-21-t13-resize-coordinator.md
+    // 简述: BorderlessResize 与 WindowChrome.ResizeBorderThickness 都提供边/角 resize,
+    // 两者通过 WM_NCHITTEST hook 互斥; 当前 BorderlessResize 抢先 hook, 所以 WindowChrome
+    // 的 resize 逻辑实际未生效. T12-C5 真机手测已确认"resize 明显流畅", 说明保留
+    // BorderlessResize 是当前最稳的方案. 真机 A/B 测两种方案(移除 BorderlessResize, 只留
+    // WindowChrome)需 winbuild 验证, 在 T13 内不盲删.
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);

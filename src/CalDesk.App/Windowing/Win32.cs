@@ -22,6 +22,12 @@ internal static partial class Win32
     public const uint SWP_SHOWWINDOW = 0x0040;
     public const uint SWP_NOOWNERZORDER = 0x0200;
 
+    // T13: resize session边沿检测。WM_ENTERSIZEMOVE 在用户开始拖动边/角或移动窗口时
+    // 立即由 DefWindowProc 发出；WM_EXITSIZEMOVE 在拖动结束（鼠标松开）发出。比
+    // SizeChanged 边沿更可靠——后者在 minimize/restore/SetWidth/SetHeight 也会触发。
+    public const int WM_ENTERSIZEMOVE = 0x0231;
+    public const int WM_EXITSIZEMOVE = 0x0232;
+
     // DWM attributes (dwmapi) — used by DwmAppearance for system shadow + Win11 corners.
     public const int DWMWA_NCRENDERING_POLICY = 2;
     public const int DWMNCRP_ENABLED = 2;
