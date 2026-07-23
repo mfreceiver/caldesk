@@ -6,7 +6,7 @@
 - **.NET 10 SDK ≥ 10.0.302**（含桌面运行时 `10.0.10`）。检查：`dotnet --version`
 - **Git 凭据**已配置（HTTPS 凭据助手 / PAT / SSH key），`git pull` 免输入。
 - 仓库已克隆在 `<your clone path>`，远程：
-  `origin = https://git.vectory.cn:18443/mfreceiver/caldesk.git`（用 HTTPS）。
+  `origin = <私有 Gitea，地址见 docs/LOCAL.md>`（用 HTTPS）。
 
 ## 二、标准流程（每次更新）
 ```powershell
@@ -44,5 +44,5 @@ dotnet test tests/CalDesk.Tests --nologo        # 目标：全部通过
 - **`找不到 SDK / net10.0`**：本机未装 .NET 10 SDK。安装：`winget install Microsoft.DotNet.SDK.10`。
 - **测试报“文件被占用”**：见第三节第 5 条（`ClearAllPools` + 重试）。
 - **`git pull` 提示要凭据**：确认已配置 HTTPS 凭据（Windows 凭据管理器 / PAT / SSH key）。
-- **克隆失败**：确认用 `https://` 克隆，且网络可达 Gitea（`git.vectory.cn`）。
+- **克隆失败**：确认用 `https://` 克隆，且网络可达私有 Gitea（域名见 `docs/LOCAL.md`）。
 - **`git pull` 报“本地改动会被覆盖”**：说明本地有未提交改动与远端冲突，先 `git stash` → `git pull` → `git stash pop`。第三节那 5 处 Windows 构建适配早已随 `131ebeb` 合入 `main`，fresh clone 自带、不会因重置/重克隆丢失。

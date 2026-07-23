@@ -5,9 +5,9 @@
 ## 一、构建机要求（Windows）
 - Windows 10 21H2 / 11
 - **.NET 10 SDK**（构建用）
-- Git（克隆 `https://git.vectory.cn:18443/mfreceiver/caldesk.git`）
+- Git（克隆**私有 Gitea origin**，地址见 `docs/LOCAL.md`）
 
-> ⚠ **开发只走私有 Gitea origin**（上面的地址）；GitHub 上的 `mfreceiver/caldesk` 仅作公开镜像（单提交、历史已清洗、滞后），**勿克隆/勿用于开发**。
+> ⚠ **开发只走私有 Gitea origin**（地址在 gitignored 的 `docs/LOCAL.md`）；GitHub 上的 `mfreceiver/caldesk` 仅作公开镜像（单提交、历史已清洗、滞后），**勿克隆/勿用于开发**。
 
 > WPF 只能在 Windows 上编译；Core / CalDav / Storage / Tests 在 Linux 验证（离线单测全绿，含对 Radicale 的实时端到端同步测试；当前用例数见 `dotnet test tests/CalDesk.Tests` 输出，随版本增长）。
 
@@ -17,7 +17,7 @@
 
 ## 三、构建步骤（在 Windows 上）
 ```powershell
-git clone https://git.vectory.cn:18443/mfreceiver/caldesk.git
+git clone <私有 Gitea origin，地址见 docs/LOCAL.md>
 cd caldesk
 
 # (可选) 跑一遍库的单元测试（不含 WPF）
