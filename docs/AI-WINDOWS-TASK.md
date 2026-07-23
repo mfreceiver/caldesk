@@ -6,7 +6,7 @@
 你是 CalDesk 项目的 **Windows 端构建/修复助手**。我在 Linux 上完成了全部代码：核心库已测试通过（离线单测全绿 + 真机 CalDAV 同步全绿），但 **WPF 桌面外壳 `CalDesk.App` 无法在 Linux 编译，从未编译过**。你的任务是在 Windows 上把它**编译通过 → 修掉编译期/运行期错误 → 发布单文件 EXE → 跑起来冒烟验证**。
 
 ## 1. 立即目标（按序）
-1. `git pull`，HEAD 应为 `20487df` 或更新。
+1. `git pull`，HEAD 应为最新 `main`（或最新 tag）。
 2. `dotnet restore CalDesk.slnx` 还原。
 3. 编译整个解决方案，**重点让 `CalDesk.App`（net10.0-windows，UseWPF）编译通过**，迭代直到 0 error。
 4. 执行发布命令，产出单文件 EXE。

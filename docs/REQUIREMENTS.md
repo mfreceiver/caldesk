@@ -18,7 +18,7 @@
 
 CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 
-- 以无边框半透明窗口常驻桌面，随时可见本周 / 未来七天事项。
+- 以无边框窗口（**不透明 `WindowChrome` + DWM 阴影**）常驻桌面，随时可见本周 / 未来七天事项。
 - 通过 CalDAV（HTTP/WebDAV）与远端日历双向同步。
 - SQLite 离线缓存，断网也能查看与新增；恢复网络后自动补传。
 - 轻量、单文件 EXE、开机启动、托盘常驻。
@@ -43,7 +43,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 语言 / 运行时 | C# / .NET 10 | 单文件 EXE 发布 |
-| UI 框架 | **WPF** | 无边框透明窗口、置顶/置底/穿透、托盘、多显示器、Win32 互操作更成熟；不为简单日历引入 WebView |
+| UI 框架 | **WPF** | 无边框窗口（不透明 `WindowChrome` + DWM 阴影）、三模式（普通/桌面/置顶）、托盘、多显示器、Win32 互操作更成熟；不为简单日历引入 WebView |
 | 架构模式 | MVVM | UI 与业务解耦，便于测试与替换 |
 | 本地缓存 | SQLite | 本地优先存储，离线可用 |
 | iCalendar | Ical.Net | 解析、生成、重复规则展开（RFC 5545）。**注意：它不等于 CalDAV 客户端** |
@@ -51,7 +51,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 | 凭据存储 | Windows Credential Locker | 不落明文 |
 | 重复提醒 | 系统通知 / 计划任务 | 见 §13 |
 
-**为何 WPF 而非 WinUI 3**：对「贴在桌面的透明小工具」场景，WPF 的无边框透明窗口、窗口 Z-order、托盘生态、Win32 窗口样式操控更直接稳定；WinUI 3 最终也常需操作 HWND。
+**为何 WPF 而非 WinUI 3**：对「贴在桌面的小工具」场景，WPF 的无边框窗口（`WindowChrome` + DWM 阴影）、窗口 Z-order、托盘生态、Win32 窗口样式操控更直接稳定；WinUI 3 最终也常需操作 HWND。
 
 ---
 
@@ -84,7 +84,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 - 点击事项 → 编辑
 - 双击空白区域 → 新增
 - 鼠标悬停 → 显示地点、说明、日历名称（Tooltip）
-- 可调透明度
+- 窗口不透明（早期透明度滑块已移除）
 - 锁定位置（防误拖）
 - 多显示器选择、DPI 缩放自适应
 - 开机启动
@@ -108,7 +108,7 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 
 ### 4.3 设置窗口（次要）
 
-账号连接、默认日历、默认时长 / 提醒、窗口模式、透明度、开机启动、同步频率、显示器选择等。
+账号连接、默认日历、默认时长 / 提醒、窗口模式、主题（浅色 / 跟随系统）、字号（S/M/L）、开机启动、同步频率、显示器选择、全量重同步等。
 
 ---
 
@@ -158,12 +158,12 @@ CalDesk 是一个 **本地优先（local-first）** 的桌面日历小工具：
 - `FR-504` ✅ 基于 `href + ETag` 的变更比较。
 - `FR-505` ✅ 冲突提示（本地与远端同时变化时，创建冲突副本，要求用户选择；**不默认 LWW**）。
 - `FR-506` ✅ 同步失败显示警告。
-- `FR-507` ⏸ WebDAV Sync Collection（`sync-token` 增量同步）。
+- `FR-507` ✅ WebDAV Sync Collection（`sync-token` 增量同步）——**已实现并作为主拉取机制**（`sync-collection` 增量 + 空 token 初拉；不支持 `sync-token` 的服务器回退 `calendar-query`）。
 
 ### 5.6 桌面窗口与系统集成
-- `FR-601` ✅ 无边框透明窗口（`WindowStyle=None` + `AllowsTransparency=True`）。
+- `FR-601` ✅ 无边框窗口（`WindowStyle=None` + `AllowsTransparency=False` + 不透明 `WindowChrome` + DWM 阴影 / 圆角）。**设计变更**：早期「透明窗口」方案已改为不透明 `WindowChrome`（更稳，支持原生阴影与圆角）。
 - `FR-602` ✅ 三种窗口模式：普通窗口 / 桌面模式 / 置顶模式。
-- `FR-603` ✅ 透明度可调、位置可锁定。
+- `FR-603` ✅ 位置可锁定。（早期「透明度可调」随透明窗口方案一并移除，窗口现为不透明。）
 - `FR-604` ✅ 不出现在 Alt+Tab（`WS_EX_TOOLWINDOW`）、尽量不抢焦点（`WS_EX_NOACTIVATE`）。
 - `FR-605` ✅ 多显示器选择、DPI 自适应、位置持久化。
 - `FR-606` ✅ 系统托盘图标（显示 / 隐藏、新增、同步、退出）。
@@ -391,11 +391,11 @@ created_at
 
 > **保留完整 `icalendar_data`**：未必支持所有扩展字段。编辑回传时尽量保留未知 `X-` 属性，而非解析后丢弃。
 
-### 11.3 增量策略
+### 11.3 增量策略（已实现）
 
-- **第一版（MVP）**：查询「过去 30 天 ~ 未来 180 天」范围；比较 `href + ETag`；每 5 分钟同步；手动刷新立即同步。
-- **第二版**：WebDAV Sync Collection（`sync-token` 增量），仅获取新增 / 修改 / 删除资源，降低大型日历开销。
-  > ⚠️ 须先确认首发服务器（Radicale）是否支持 `sync-collection`；不支持则长期沿用 ETag 轮询。
+- **主机制 — WebDAV Sync Collection（`sync-token` 增量）**：首发服务器（Radicale）已确认支持 `sync-collection`（§14.1）。对已存 `sync-token` 的日历走增量；首次用空 token 的 `sync-collection` 全量拉取。仅获取新增 / 修改 / 删除资源，降低大型日历开销。
+- **兜底 — `calendar-query`**：当服务器不公告 `sync-token` 时，回退到「过去 30 天 ~ 未来 180 天」范围的 `REPORT calendar-query`（无法探测删除，靠本地 `deleted_at` 兜底）。
+- **节奏**：默认每 5 分钟同步；手动刷新立即同步；设置页提供「全量重同步」入口（丢弃 `sync-token` 重新初拉，用于修复不一致）。
 
 ### 11.4 冲突处理
 
@@ -485,10 +485,10 @@ EventException
 - SQLite 离线缓存
 - 5 分钟自动同步
 - 托盘图标 + 开机启动
-- 无边框透明桌面窗口（三模式）
+- 无边框桌面窗口（不透明 `WindowChrome`，三模式）
 - 基本提醒
 
-**暂缓（⏸）**：CalDAV Scheduling、复杂重复规则编辑、「本次及以后」、VTODO 全兼容、多账户合并、WebDAV Sync Collection、Windows Widgets Provider、鼠标穿透、WorkerW 嵌入。
+**暂缓（⏸）**：CalDAV Scheduling、复杂重复规则编辑、「本次及以后」、VTODO 全兼容、多账户合并、Windows Widgets Provider、鼠标穿透、WorkerW 嵌入。（WebDAV Sync Collection 已实现，不再暂缓。）
 
 **放弃（❌）**：自然语言解析、共享权限管理、会议邀请与参会状态。
 
@@ -512,3 +512,21 @@ EventException
 > **C# + WPF 做桌面外壳，SQLite 做本地优先缓存，Ical.Net 处理 iCalendar，自行实现精简 CalDAV 客户端。**
 
 不从完整 RFC 覆盖开始。先针对实际使用的服务器（Radicale）完成 discovery、查询、PUT、DELETE 和 ETag 冲突控制；稳定之后再扩大兼容范围。具体里程碑与验收见 [ROADMAP.md](./ROADMAP.md)。
+
+---
+
+## 18. 实现状态与基线偏差（2026-07-23 快照）
+
+> 本文是产品基线（做什么 / 为什么）。以下为实现期相对基线的**已落地偏差 / 补充**，以代码为准；FR 编号变更见上文对应条目。
+
+- **窗口外观**：从「无边框透明窗口」改为**不透明 `WindowChrome` + DWM 阴影 + 圆角**（`AllowsTransparency=False`）。更稳定、支持原生阴影与圆角，规避透明窗口的渲染 / 焦点问题；窗口级透明度滑块随之移除（`FR-601 / 603`）。
+- **同步机制**：WebDAV **`sync-collection` 为主**（`sync-token` 增量 + 空 token 初拉），不支持 `sync-token` 的服务器回退 `calendar-query`。`FR-507` 由「暂缓」转为「已实现」（§11.3）。
+- **主题系统**：支持**浅色 / 跟随系统**两套主题（`Palette.Light / Dark.xaml` + `SystemThemeWatcher`），随系统明暗自动切换。
+- **字号**：设置中可选 **S / M / L** 三档字号。
+- **日历调色板**：设置页可逐日历配色（声明式 12 色板）。
+- **DST 安全日期运算**：周 / 月范围按本地零点 ↔ UTC 换算，含夏令时 `IsInvalidTime` 间隙保护（避免重复事件跨夏令时错位）。
+- **存储优化**：周 / 月视图用轻量范围查询 + 按需回填重复展开数据，降低大日历开销。
+- **全量重同步**：设置页提供「全量重同步」入口（丢弃 `sync-token` 重新初拉，用于修复不一致）。
+- **诊断**：`StartupLog` 文件日志（崩溃安全）+ 全局异常处理，便于排障。
+
+里程碑实现进度见 [ROADMAP.md](./ROADMAP.md)。

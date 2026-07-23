@@ -1,6 +1,6 @@
 # AGENTS.md — CalDesk 操作指引（AI agent 入口）
 
-CalDesk 是一个 **WPF 桌面 CalDAV 日历客户端**（无边框透明周/月视图、本地优先 SQLite、
+CalDesk 是一个 **WPF 桌面 CalDAV 日历客户端**（无边框不透明周/月视图、本地优先 SQLite、
 多日历同步、托盘常驻、提醒）。核心库（Core/CalDav/Storage）跨平台；WPF 外壳仅 Windows。
 
 > 个人/私有配置（服务器、token、构建机 IP）在 `docs/LOCAL.md`（**gitignored，不进版本库**）。
@@ -15,7 +15,7 @@ scripts/release.sh            发版打 tag（patch|minor|major）
 src/CalDesk.Core/             领域模型 + 服务契约 + CalendarViewService（周/月视图逻辑）
 src/CalDesk.CalDav/           CalDAV 客户端 + 同步引擎 + iCalendar 映射/展开
 src/CalDesk.Storage/          SQLite（WAL/FK/迁移/索引）+ 仓储
-src/CalDesk.App/              WPF（net10.0-windows）：周/月窗、快速新增、设置、托盘、关于
+src/CalDesk.App/              WPF（net10.0-windows10.0.19041.0）：周/月窗、快速新增、设置（主题/字号/全量重同步）、托盘、关于
 tests/CalDesk.Tests/          单测 + 对真机 CalDAV 的集成测试（env 触发，默认 skip）
 docs/                         全部文档（见下方索引）
 misc/icon.svg                 应用图标源（已生成 src/CalDesk.App/Assets/app.ico + icon.png）

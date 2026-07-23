@@ -5,7 +5,9 @@
 ## 一、构建机要求（Windows）
 - Windows 10 21H2 / 11
 - **.NET 10 SDK**（构建用）
-- Git（克隆 `https://github.com/mfreceiver/caldesk.git`）
+- Git（克隆 `https://git.vectory.cn:18443/mfreceiver/caldesk.git`）
+
+> ⚠ **开发只走私有 Gitea origin**（上面的地址）；GitHub 上的 `mfreceiver/caldesk` 仅作公开镜像（单提交、历史已清洗、滞后），**勿克隆/勿用于开发**。
 
 > WPF 只能在 Windows 上编译；Core / CalDav / Storage / Tests 在 Linux 验证（离线单测全绿，含对 Radicale 的实时端到端同步测试；当前用例数见 `dotnet test tests/CalDesk.Tests` 输出，随版本增长）。
 
@@ -15,7 +17,7 @@
 
 ## 三、构建步骤（在 Windows 上）
 ```powershell
-git clone https://github.com/mfreceiver/caldesk.git
+git clone https://git.vectory.cn:18443/mfreceiver/caldesk.git
 cd caldesk
 
 # (可选) 跑一遍库的单元测试（不含 WPF）
@@ -54,10 +56,10 @@ powershell -ExecutionPolicy Bypass -File scripts\publish.ps1 -Version <tag>
 - 密码：Windows 凭据管理器（目标名 `CalDesk:account:<id>`），**绝不写入 DB / 配置 / 注册表明文**
 
 ## 六、关于本次产出的说明（重要）
-WPF 桌面外壳（`CalDesk.App`）是在 Linux 上编写的（Linux 无法编译 WPF），遵循标准模式与 Win32 互操作约定。**首次在 Windows 编译时若出现编译错误，请把错误贴回，我会就地修复**——核心数据通路（CalDAV / 存储 / 同步 / 重复展开）已通过对 Radicale 的实时测试验证，逻辑层是稳的。
+核心库（`CalDesk.Core | CalDav | Storage`）在 Linux 上跨平台开发并通过测试；WPF 桌面外壳（`CalDesk.App`）在 Windows 上迭代（Linux 无法编译 WPF）。若 Windows 端编译出现错误，请把错误贴回，我会就地修复——核心数据通路（CalDAV / 存储 / 同步 / 重复展开）已通过对 Radicale 的实时测试验证，逻辑层是稳的。
 
 ## 七、MVP 范围与已知限制
-- ✅ 多日历、周视图、月份角标今日、增删改、全天、基础重复显示、5 分钟同步、托盘、开机启动、无边框透明窗口（普通/桌面/置顶）、基本提醒（尊重远端 VALARM + 全局默认）。
+- ✅ 多日历、周视图、月份角标今日、增删改、全天、基础重复显示、5 分钟同步、托盘、开机启动、无边框不透明窗口（普通/桌面/置顶）、基本提醒（尊重远端 VALARM + 全局默认）。
 - ⏸/❌ 暂缓/放弃：复杂重复编辑器、本次及以后、多账户合并、WinUI Widgets、自然语言解析、WorkerW 严格嵌入（实验）、VTODO。
 - 同步冲突：本地与远端同时改动 → 本地标记「冲突」并在状态栏提示，**绝不静默覆盖**（G4-16）。
 - 初始全量同步用 `sync-collection` 拉取（已确认 Radicale 支持），之后按 `sync-token` 增量并感知删除。
