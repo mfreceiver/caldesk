@@ -30,6 +30,7 @@ public partial class App : Application
     private MonthWindow _month = null!;
     private Window? _lastShown;
     private SystemThemeWatcher? _themeWatcher;
+    private DayChangeWatcher? _dayChangeWatcher;
 
     // T13/A4+B3: 统一 resize 机制 + resize-session 协调器. 每窗口一个 ResizeSession,
     // 通过 HwndSource hook 监听 WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE 精确检测 resize
@@ -93,6 +94,12 @@ public partial class App : Application
         };
         _themeWatcher.Start();
         StartupLog.Log($"OnStartup: theme applied  theme={_settingsSvc.Current.Theme}");
+
+        // Date-change watcher: midnight rollover, wake from sleep, manual clock/timezone
+        // edits. Raises DayChanged once per new local date → refresh both view models.
+        _dayChangeWatcher = new DayChangeWatcher(Dispatcher);
+        _dayChangeWatcher.DayChanged += () => DoRefreshAfterSync();
+        _dayChangeWatcher.Start();
 
         _creds = new WindowsCredentialStore();
         StartupLog.Log("OnStartup: WindowsCredentialStore created");
@@ -779,6 +786,7 @@ public partial class App : Application
 
         _settingsSvc.Save(s);
         _themeWatcher?.Dispose();
+        _dayChangeWatcher?.Dispose();
         _reminders?.Dispose();
         _sync?.Dispose();
         // T13: 释放 ResizeSession — stop debounce timer + RemoveHook HwndSource.
