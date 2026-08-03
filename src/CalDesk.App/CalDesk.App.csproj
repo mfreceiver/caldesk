@@ -2,11 +2,14 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <AssemblyName>CalDesk</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SatelliteResourceLanguages>zh-CN;en</SatelliteResourceLanguages>
+    <!-- Compress bundled assemblies in single-file EXE (~35-50% off managed size,
+         ~30-50ms extra startup, negligible for a tray app). -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <!-- Allow restore/design-time on non-Windows (actual WPF compile still requires Windows) -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
