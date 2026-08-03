@@ -30,3 +30,7 @@ docs/LOCAL.md
 .slim/worktrees/
 .slim/worktrees.json
 # END oh-my-opencode-slim worktrees
+
+## Agent tooling runtime (ocmar workflow reports / omni-orch reports)
+.ocmar/
+.omni-orch/
