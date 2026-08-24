@@ -193,11 +193,15 @@ internal sealed class EventRepository : IEventRepository
     {
         await using var lease = await _db.LeaseCommandAsync();
         await using var cmd = lease.CreateCommand();
+        // Hygiene #9: no `deleted_at IS NULL` filter here. A soft delete stamps deleted_at
+        // AND sets sync_status='DeletedLocal' (MarkDeletedAsync), so that filter excluded
+        // exactly the rows the 'DeletedLocal' IN-term was meant to surface — the pending-sync
+        // queue must contain local deletions awaiting their server-side DELETE. New/Modified
+        // rows always have deleted_at NULL, so dropping the filter leaves them unchanged.
         cmd.CommandText = $"""
             SELECT {SelectColumns}
             FROM events
             WHERE sync_status IN ('NewLocal', 'ModifiedLocal', 'DeletedLocal', 'Conflict', 'Error')
-              AND deleted_at IS NULL
             ORDER BY updated_at
             """;
 
@@ -266,6 +270,26 @@ internal sealed class EventRepository : IEventRepository
         cmd.Parameters.AddWithValue("@created_at", DbConvert.ToTimestamp(evt.CreatedAt));
         cmd.Parameters.AddWithValue("@updated_at", DbConvert.ToTimestamp(evt.UpdatedAt));
 
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>CQ-003: update only the server-assignment columns of an existing row. Intentionally
+    /// does NOT touch <c>updated_at</c>/<c>sync_status</c>: this runs while a concurrent edit owns
+    /// those columns, and bumping them here would make the row look newer than the edit or break
+    /// the next push's own freshness comparison.</summary>
+    public async Task UpdateSyncFieldsAsync(Guid id, string? remoteHref, string? etag, CancellationToken ct = default)
+    {
+        await using var lease = await _db.LeaseCommandAsync();
+        await using var cmd = lease.CreateCommand();
+        cmd.CommandText = """
+            UPDATE events
+            SET remote_href = @remote_href,
+                etag = @etag
+            WHERE id = @id
+            """;
+        cmd.Parameters.AddWithValue("@id", DbConvert.ToText(id));
+        cmd.Parameters.AddWithValue("@remote_href", (object?)remoteHref ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@etag", (object?)etag ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

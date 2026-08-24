@@ -27,11 +27,21 @@ public interface ICalDavClient : IAsyncDisposable
         string? ifMatchEtag,
         CancellationToken ct = default);
 
-    /// <summary>Delete a remote event via <c>DELETE</c> with <c>If-Match</c>.</summary>
+    /// <summary>Delete a remote event via <c>DELETE</c>. Pass the known ETag in
+    /// <paramref name="ifMatchEtag"/> for optimistic concurrency, or null for an
+    /// unconditional delete (RFC 4918 §10.6) when the server does not return ETags.</summary>
     Task DeleteEventAsync(
         CalendarInfo calendar,
         string href,
-        string ifMatchEtag,
+        string? ifMatchEtag,
+        CancellationToken ct = default);
+
+    /// <summary>Fetch a single resource by href via <c>GET</c>. Returns null when the server
+    /// reports the resource gone (404/410); throws on other failures. Used to recover
+    /// sync-collection entries whose response body was missing.</summary>
+    Task<RemoteEventEntry?> GetEventAsync(
+        CalendarInfo calendar,
+        string href,
         CancellationToken ct = default);
 
     /// <summary>Incremental sync via WebDAV <c>sync-collection</c>. When unsupported by the

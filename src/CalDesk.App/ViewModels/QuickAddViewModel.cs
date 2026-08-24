@@ -14,6 +14,12 @@ public enum RecurrencePick
     Daily,
     Weekly,
     Monthly,
+
+    /// <summary>An existing rule that none of the creatable presets can represent
+    /// (e.g. INTERVAL&gt;1, COUNT/UNTIL, YEARLY, BYMONTHDAY). Editing keeps the stored rule
+    /// untouched instead of silently destroying it (CQ-001). Never offered when creating —
+    /// a new event has no rule to preserve.</summary>
+    Custom,
 }
 
 public sealed partial class QuickAddViewModel : ObservableObject
@@ -36,7 +42,17 @@ public sealed partial class QuickAddViewModel : ObservableObject
     public event Action? RequestClose;
 
     public List<CalendarInfo> Calendars { get; }
-    public RecurrencePick[] RepeatOptions { get; } = Enum.GetValues<RecurrencePick>();
+
+    private static readonly RecurrencePick[] CreateRepeatOptions =
+        { RecurrencePick.None, RecurrencePick.Daily, RecurrencePick.Weekly, RecurrencePick.Monthly };
+
+    // Full set for editing: additionally offers Custom ("keep the existing rule as-is").
+    private static readonly RecurrencePick[] EditRepeatOptions = Enum.GetValues<RecurrencePick>();
+
+    /// <summary>Repeat choices for the combo box. Editing includes
+    /// <see cref="RecurrencePick.Custom"/> for rules no preset can represent; creating must
+    /// not offer it (there is no existing rule to keep).</summary>
+    public RecurrencePick[] RepeatOptions => IsEditing ? EditRepeatOptions : CreateRepeatOptions;
 
     [ObservableProperty] private string _title = string.Empty;
 
@@ -57,7 +73,9 @@ public sealed partial class QuickAddViewModel : ObservableObject
     [ObservableProperty] private CalendarInfo? _selectedCalendar;
     [ObservableProperty] private bool _hasAdvanced;
 
-    [ObservableProperty] private bool _isEditing;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RepeatOptions))]
+    private bool _isEditing;
 
     /// <summary>User-visible validation message; null when ok.</summary>
     [ObservableProperty]
@@ -152,10 +170,15 @@ public sealed partial class QuickAddViewModel : ObservableObject
             Location = evt.Location ?? string.Empty;
             ReminderMinutes = ReminderService.ParseTriggerMinutes(evt) ?? _settings.DefaultReminderMinutes;
             var rule = evt.RecurrenceRule;
+            // Exact preset matches only; any other non-blank rule is one this dialog cannot
+            // represent (INTERVAL=2, COUNT/UNTIL, YEARLY, BYMONTHDAY, …). Show it as Custom
+            // and keep the stored rule verbatim on save — rewriting it from our subset would
+            // silently destroy the parts we cannot model (CQ-001).
             Repeat = rule == "FREQ=DAILY;INTERVAL=1" ? RecurrencePick.Daily
                    : rule == "FREQ=WEEKLY;INTERVAL=1;BYDAY=" + DayOfWeekCode(startLocal.DayOfWeek) ? RecurrencePick.Weekly
                    : rule == "FREQ=MONTHLY;INTERVAL=1" ? RecurrencePick.Monthly
-                   : RecurrencePick.None;
+                   : string.IsNullOrWhiteSpace(rule) ? RecurrencePick.None
+                   : RecurrencePick.Custom;
             SelectedCalendar = Calendars.FirstOrDefault(c => c.Id == evt.CalendarId);
             // Expand advanced when editing a recurring event so repeat is visible.
             HasAdvanced = Repeat != RecurrencePick.None;
@@ -345,7 +368,8 @@ public sealed partial class QuickAddViewModel : ObservableObject
             RecurrencePick.Daily => "FREQ=DAILY;INTERVAL=1",
             RecurrencePick.Weekly => $"FREQ=WEEKLY;INTERVAL=1;BYDAY={DayOfWeekCode(startDateOnly.DayOfWeek)}",
             RecurrencePick.Monthly => "FREQ=MONTHLY;INTERVAL=1",
-            _ => null,
+            RecurrencePick.Custom => evt.RecurrenceRule, // keep the server rule untouched (CQ-001)
+            _ => null, // None: the user explicitly chose "does not repeat"
         };
 
         if (_editing is null)

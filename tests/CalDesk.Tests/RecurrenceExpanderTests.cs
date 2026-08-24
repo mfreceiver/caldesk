@@ -134,4 +134,121 @@ public sealed class RecurrenceExpanderTests
         // No occurrence starts on/after rangeEnd.
         Assert.All(occs, o => Assert.True(o.StartUtc < rangeEnd));
     }
+
+    // ---- CQ-004: same-resource RECURRENCE-ID overrides ---------------------
+
+    private const string VCalHead = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n";
+    private const string VCalTail = "END:VCALENDAR\r\n";
+
+    /// <summary>Master DAILY 09:00Z from 7/13 plus an override that MOVES the 7/15
+    /// occurrence to 14:00Z (same resource, RECURRENCE-ID form).</summary>
+    private static string IcsWithMovedOverride(bool overrideFirst)
+    {
+        var master =
+            "BEGIN:VEVENT\r\nUID:ovr\r\nDTSTART:20260713T090000Z\r\nDTEND:20260713T100000Z\r\n" +
+            "RRULE:FREQ=DAILY;INTERVAL=1\r\nSUMMARY:master\r\nEND:VEVENT\r\n";
+        var ov =
+            "BEGIN:VEVENT\r\nUID:ovr\r\nRECURRENCE-ID:20260715T090000Z\r\n" +
+            "DTSTART:20260715T140000Z\r\nDTEND:20260715T150000Z\r\nSUMMARY:moved\r\nEND:VEVENT\r\n";
+        return VCalHead + (overrideFirst ? ov + master : master + ov) + VCalTail;
+    }
+
+    private static CalendarEvent MakeRecurringFromRaw(string raw)
+    {
+        var evt = new CalendarEvent
+        {
+            Id = Guid.NewGuid(),
+            Uid = "ovr",
+            Summary = "Recurring",
+            // Any non-blank rule routes through the raw-ICS expansion path; the actual
+            // series comes from the ICS itself.
+            StartUtc = new DateTimeOffset(2026, 7, 13, 9, 0, 0, TimeSpan.Zero),
+            EndUtc = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero),
+        };
+        evt.RecurrenceRule = "FREQ=DAILY;INTERVAL=1";
+        evt.ICalendarData = raw;
+        return evt;
+    }
+
+    [Fact]
+    public void SameResourceOverride_MovedInstance_ShowsAtNewTimeOnly()
+    {
+        // The override must REPLACE the master occurrence it targets: 7/15 09:00 (old slot)
+        // disappears, 7/15 14:00 (new slot) appears, and the untouched master occurrences
+        // stay. Previously the expander dropped the override VEVENT entirely: the moved
+        // instance showed at its old time and never at the new one.
+        var evt = MakeRecurringFromRaw(IcsWithMovedOverride(overrideFirst: false));
+        var rangeStart = new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero);
+        var rangeEnd = rangeStart.AddDays(7);
+
+        var occs = _expander.Expand(evt, new CalendarInfo(), rangeStart, rangeEnd).ToList();
+
+        var oldSlot = new DateTimeOffset(2026, 7, 15, 9, 0, 0, TimeSpan.Zero);
+        var newSlot = new DateTimeOffset(2026, 7, 15, 14, 0, 0, TimeSpan.Zero);
+        Assert.DoesNotContain(occs, o => o.StartUtc == oldSlot);
+        Assert.Contains(occs, o => o.StartUtc == newSlot);
+        var moved = occs.Single(o => o.StartUtc == newSlot);
+        Assert.Equal(newSlot.AddHours(1), moved.EndUtc);
+        // Untouched master occurrences remain.
+        Assert.Contains(occs, o => o.StartUtc == new DateTimeOffset(2026, 7, 14, 9, 0, 0, TimeSpan.Zero));
+        Assert.Contains(occs, o => o.StartUtc == new DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void SameResourceOverride_FirstInFile_MasterIsStillSelected()
+    {
+        // Audit layout 3: when the override VEVENT precedes the master in the file, the
+        // "first VEVENT with matching UID" pick grabs the override and the whole series
+        // vanishes. Master selection must skip RECURRENCE-ID components.
+        var evt = MakeRecurringFromRaw(IcsWithMovedOverride(overrideFirst: true));
+        var rangeStart = new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero);
+        var rangeEnd = rangeStart.AddDays(7);
+
+        var occs = _expander.Expand(evt, new CalendarInfo(), rangeStart, rangeEnd).ToList();
+
+        Assert.True(occs.Count >= 7, $"series vanished: {occs.Count} occurrences");
+        Assert.DoesNotContain(occs, o => o.StartUtc == new DateTimeOffset(2026, 7, 15, 9, 0, 0, TimeSpan.Zero));
+        Assert.Contains(occs, o => o.StartUtc == new DateTimeOffset(2026, 7, 15, 14, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void SameResourceOverride_Cancelled_RemovesInstance()
+    {
+        // RFC 5545 semantics used by Google & co. to delete a single instance: an override
+        // with STATUS:CANCELLED (DTSTART mirroring the RECURRENCE-ID slot). The instance
+        // must disappear entirely — neither the old master slot nor a new one.
+        var ics = VCalHead +
+                  "BEGIN:VEVENT\r\nUID:ovr\r\nDTSTART:20260713T090000Z\r\nDTEND:20260713T100000Z\r\n" +
+                  "RRULE:FREQ=DAILY;INTERVAL=1\r\nSUMMARY:master\r\nEND:VEVENT\r\n" +
+                  "BEGIN:VEVENT\r\nUID:ovr\r\nRECURRENCE-ID:20260715T090000Z\r\n" +
+                  "DTSTART:20260715T090000Z\r\nDTEND:20260715T100000Z\r\nSTATUS:CANCELLED\r\nSUMMARY:gone\r\nEND:VEVENT\r\n" +
+                  VCalTail;
+        var evt = MakeRecurringFromRaw(ics);
+        var rangeStart = new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero);
+        var rangeEnd = rangeStart.AddDays(7);
+
+        var occs = _expander.Expand(evt, new CalendarInfo(), rangeStart, rangeEnd).ToList();
+
+        Assert.DoesNotContain(occs, o => o.StartUtc.Date == new DateTime(2026, 7, 15));
+        // Series continues around the hole.
+        Assert.Contains(occs, o => o.StartUtc == new DateTimeOffset(2026, 7, 14, 9, 0, 0, TimeSpan.Zero));
+        Assert.Contains(occs, o => o.StartUtc == new DateTimeOffset(2026, 7, 16, 9, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void PureMaster_NoOverride_UnchangedSeries()
+    {
+        // Regression lock: a plain recurring event (no overrides in the resource) expands
+        // exactly as before the CQ-004 change.
+        var evt = MakeRecurringFromRaw(VCalHead +
+                                       "BEGIN:VEVENT\r\nUID:ovr\r\nDTSTART:20260713T090000Z\r\nDTEND:20260713T100000Z\r\n" +
+                                       "RRULE:FREQ=DAILY;INTERVAL=1\r\nSUMMARY:master\r\nEND:VEVENT\r\n" + VCalTail);
+        var rangeStart = new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero);
+        var rangeEnd = rangeStart.AddDays(7);
+
+        var occs = _expander.Expand(evt, new CalendarInfo(), rangeStart, rangeEnd).ToList();
+
+        Assert.Equal(7, occs.Count);
+        Assert.All(occs, o => Assert.Equal(9, o.StartUtc.Hour));
+    }
 }

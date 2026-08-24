@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- Mirrors CalDesk.App so the project restores/designs identically. This project is
+         deliberately NOT part of CalDesk.slnx: it can only build and run on Windows
+         (winbuild); `dotnet build CalDesk.slnx` on Linux must stay green without it. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Core/CalDav/Storage come in transitively via CalDesk.App. -->
+    <ProjectReference Include="..\..\src\CalDesk.App\CalDesk.App.csproj" />
+  </ItemGroup>
+
+</Project>

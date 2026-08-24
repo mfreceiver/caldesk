@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:CalDesk.App.ViewModels"
+        xmlns:conv="clr-namespace:CalDesk.App.Converters"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d" d:DataContext="{d:DesignInstance Type=vm:QuickAddViewModel}"
         Title="新增 / 编辑事项" Width="380" SizeToContent="Height"
@@ -19,6 +20,7 @@
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="Bool2Vis" />
+        <conv:RepeatOptionLabelConverter x:Key="RepeatOptionLabel" />
     </Window.Resources>
 
     <!-- T12: opaque + WindowChrome; DropShadowEffect removed (DWM shadow via DwmAppearance).
@@ -227,7 +229,15 @@
                 <ComboBox Grid.Column="1"
                           Style="{StaticResource CardComboBox}"
                           ItemsSource="{Binding RepeatOptions}"
-                          SelectedItem="{Binding Repeat}" />
+                          SelectedItem="{Binding Repeat}">
+                    <!-- CQ-001: label template gives Custom its "keep as-is" display text;
+                         RepeatOptions itself excludes Custom while creating. -->
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Converter={StaticResource RepeatOptionLabel}}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </Grid>
 
             <Button Grid.Row="8" Content="[ 更多选项 ]"

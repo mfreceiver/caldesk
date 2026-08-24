@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CalDesk.Core.Recurrence;
 
 /// <summary>iCalendar recurrence frequency.</summary>
@@ -22,8 +24,15 @@ public sealed class RecurrencePattern
     /// <summary>Total number of occurrences, or null if unbounded.</summary>
     public int? Count { get; set; }
 
-    /// <summary>Inclusive end date, or null if unbounded.</summary>
-    public DateOnly? Until { get; set; }
+    /// <summary>Inclusive recurrence end (the UNTIL value). When <see cref="UntilHasTime"/>
+    /// is false only the date part is significant (DATE form). Null when unbounded.</summary>
+    public DateTime? Until { get; set; }
+
+    /// <summary>True when UNTIL must serialize in the DATE-TIME form. RFC 5545 §3.3.10
+    /// requires the UNTIL value type to match DTSTART, so the parsed form is preserved
+    /// through Parse→ToRrule instead of truncating DATE-TIME values to midnight — which
+    /// silently dropped the final occurrence of bounded series (CQ-007).</summary>
+    public bool UntilHasTime { get; set; }
 
     /// <summary>For weekly recurrence: the weekdays to repeat on.</summary>
     public List<DayOfWeek> ByDay { get; set; } = new();
@@ -56,9 +65,19 @@ public sealed class RecurrencePattern
             parts.Add($"COUNT={Count.Value}");
         }
 
-        if (Until.HasValue)
+        if (Until is { } until)
         {
-            parts.Add($"UNTIL={Until.Value:yyyyMMdd}");
+            if (UntilHasTime)
+            {
+                // Keep the DATE-TIME form — and the UTC marker when the value carried one —
+                // so a bounded series does not lose its final occurrence (CQ-007).
+                var z = until.Kind == DateTimeKind.Utc ? "Z" : string.Empty;
+                parts.Add($"UNTIL={until:yyyyMMdd'T'HHmmss}{z}");
+            }
+            else
+            {
+                parts.Add($"UNTIL={until:yyyyMMdd}");
+            }
         }
 
         if (Frequency == Frequency.Weekly && ByDay.Count > 0)
@@ -85,6 +104,7 @@ public sealed class RecurrencePattern
         }
 
         var result = new RecurrencePattern();
+        Frequency? frequency = null;
         foreach (var token in value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var eq = token.IndexOf('=');
@@ -99,7 +119,7 @@ public sealed class RecurrencePattern
             switch (key)
             {
                 case "FREQ" when Enum.TryParse<Frequency>(val, ignoreCase: true, out var f):
-                    result.Frequency = f;
+                    frequency = f;
                     break;
                 case "INTERVAL" when int.TryParse(val, out var iv):
                     result.Interval = iv <= 0 ? 1 : iv;
@@ -108,7 +128,7 @@ public sealed class RecurrencePattern
                     result.Count = c;
                     break;
                 case "UNTIL":
-                    result.Until = ParseUntil(val);
+                    (result.Until, result.UntilHasTime) = ParseUntil(val);
                     break;
                 case "BYDAY":
                     result.ByDay = val.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -119,24 +139,43 @@ public sealed class RecurrencePattern
             }
         }
 
+        // Unknown (HOURLY/MINUTELY/SECONDLY/…) or missing FREQ → not a rule this subset can
+        // represent. Return null rather than silently keeping the Weekly default: callers
+        // compare Parse(rule) output against presets, and a defaulted Frequency would
+        // misclassify the rule (CQ-001 trap).
+        if (frequency is null)
+        {
+            return null;
+        }
+
+        result.Frequency = frequency.Value;
         return result;
     }
 
-    private static DateOnly? ParseUntil(string val)
+    /// <summary>Parses an UNTIL value in either RFC 5545 form: DATE (YYYYMMDD) or
+    /// DATE-TIME (…THHMMSS, optionally Z-suffixed). The form flag travels with the value
+    /// so <see cref="ToRrule"/> re-emits the same shape (CQ-007). An unparseable value
+    /// yields (null, false) and is treated as "no bound set".</summary>
+    private static (DateTime? Until, bool HasTime) ParseUntil(string val)
     {
-        // YYYYMMDD or YYYYMMDDThhmmss[Z]
         var s = val.Trim();
-        if (s.EndsWith('Z'))
+        var isUtc = s.EndsWith('Z');
+        if (isUtc)
         {
             s = s[..^1];
         }
 
-        if (s.Length == 8 && DateOnly.TryParseExact(s, "yyyyMMdd", out var d))
+        if (s.Length == 8 && DateTime.TryParseExact(s, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
         {
-            return d;
+            return (date, HasTime: false);
         }
 
-        var datePart = s.Length >= 8 ? s[..8] : s;
-        return DateOnly.TryParseExact(datePart, "yyyyMMdd", out var dd) ? dd : null;
+        if (DateTime.TryParseExact(s, "yyyyMMdd'T'HHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTime))
+        {
+            // Keep the UTC marker (if any) as the DateTime kind so ToRrule can restore it.
+            return (DateTime.SpecifyKind(dateTime, isUtc ? DateTimeKind.Utc : DateTimeKind.Unspecified), HasTime: true);
+        }
+
+        return (null, HasTime: false);
     }
 }

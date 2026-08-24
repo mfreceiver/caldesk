@@ -36,6 +36,8 @@ dotnet test tests/CalDesk.Tests --nologo    # 离线单测全绿；live 集成�
 ```bash
 ssh winbuild 'cd C:\Dev_Code\caldesk && git -c credential.helper= pull && dotnet build CalDesk.slnx -c Debug && dotnet test tests/CalDesk.Tests'
 ```
+> App 层测试（`tests/CalDesk.App.Tests`，**不在 slnx 内**，引用 App+WPF）仅 winbuild 可跑：
+> `ssh winbuild 'cd C:\Dev_Code\caldesk && dotnet test tests/CalDesk.App.Tests'`
 发布单文件 EXE（产物到 `<repo>\release\CalDesk.exe`）：
 ```bash
 # dev/试用构建（默认，版本自动带 commit 锚点，可追溯、可覆盖升级）

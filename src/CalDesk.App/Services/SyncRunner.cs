@@ -151,6 +151,14 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
             return;
         }
 
+        await RunCoreAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Sync body shared by <see cref="RunAsync"/> and <see cref="FullResyncAsync"/>.
+    /// The caller must already hold <c>_running</c> (CAS-acquired); this method owns the status
+    /// generation dance and always releases <c>_running</c> in its finally.</summary>
+    private async Task RunCoreAsync()
+    {
         // null head => resting format after release; non-null => error/conflict head + pending.
         string? releaseStatusHead = null;
         var reapplyPendingAfterRelease = false;
@@ -250,13 +258,54 @@ public sealed partial class SyncRunner : ObservableObject, IDisposable
     /// <summary>Wipe all local events and sync state (keeps account configuration and calendar
     /// colors), then trigger a full re-pull. This recovers from one-time conversion bugs such
     /// as historical TZID values that were stored before the conversion fix.</summary>
+    /// <remarks>CQ-002: the wipe must never run while another sync is in flight. A periodic run
+    /// that races the wipe would write its pre-wipe sync token back into the now-empty store,
+    /// after which every later pull sees a valid token + zero changes — an empty calendar that
+    /// reports success forever. So we first acquire the same <c>_running</c> mutex
+    /// <see cref="RunAsync"/> uses (spin + short delay, bounded); on timeout we report failure
+    /// through the normal status path instead of wiping.</remarks>
     public async Task FullResyncAsync(CancellationToken ct = default)
     {
-        await _store.Events.HardDeleteAllAsync(ct).ConfigureAwait(false);
-        await _store.Calendars.ClearAllSyncTokensAsync(ct).ConfigureAwait(false);
-        await _store.SyncState.ClearAllAsync(ct).ConfigureAwait(false);
-        await _store.SyncOperations.ClearAllAsync(ct).ConfigureAwait(false);
-        await RunAsync().ConfigureAwait(false);
+        StartupLog.Log("SyncRunner.FullResyncAsync: waiting for in-flight sync");
+        var deadline = Environment.TickCount64 + 30_000;
+        while (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+        {
+            if (Environment.TickCount64 >= deadline)
+            {
+                StartupLog.Log("SyncRunner.FullResyncAsync: timed out waiting for in-flight sync");
+                // Existing error-report path (same head+pending shape RunAsync's catch uses).
+                // Its gen/running guards make this a no-op while the other run still owns status.
+                await SetStatusWithPendingAsync("全量重同步失败：等待同步结束超时，请稍后重试", ct).ConfigureAwait(false);
+                return;
+            }
+
+            await Task.Delay(50, ct).ConfigureAwait(false);
+        }
+
+        var runCoreReached = false;
+        try
+        {
+            await _store.Events.HardDeleteAllAsync(ct).ConfigureAwait(false);
+            await _store.Calendars.ClearAllSyncTokensAsync(ct).ConfigureAwait(false);
+            await _store.SyncState.ClearAllAsync(ct).ConfigureAwait(false);
+            await _store.SyncOperations.ClearAllAsync(ct).ConfigureAwait(false);
+
+            // Empty sync tokens => SyncEngine pulls everything from scratch. RunCoreAsync
+            // releases _running in its own finally; periodic ticks CAS-fail against it and
+            // skip, which is exactly the mutual exclusion we want during the re-pull.
+            runCoreReached = true;
+            await RunCoreAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            // Only release here when RunCoreAsync was never reached (a wipe call above threw);
+            // otherwise we could stomp on an unrelated run that legitimately re-acquired.
+            if (!runCoreReached)
+            {
+                Interlocked.Exchange(ref _running, 0);
+                Interlocked.Increment(ref _statusGen);
+            }
+        }
     }
 
     public void Dispose()

@@ -110,12 +110,15 @@ public sealed class SyncEngine(
 
         // 2) Initial population: sync-collection with an empty token returns the full current
         //    state plus a token we save for future incremental syncs (detects deletions later).
+        //    This branch also serves as the RFC 6578 §3.2 recovery path after an invalid token.
         if (cal.SupportsSyncToken)
         {
             var init = await client.SyncCollectionAsync(cal, null, ct).ConfigureAwait(false);
             if (init.Supported)
             {
-                await ApplySyncCollectionAsync(cal, init, report, ct).ConfigureAwait(false);
+                // fullSync: the response lists the *current* members, so the engine also
+                // reconciles local rows the server no longer has (CQ-009②).
+                await ApplySyncCollectionAsync(cal, init, report, ct, fullSync: true).ConfigureAwait(false);
                 return;
             }
         }
@@ -130,16 +133,76 @@ public sealed class SyncEngine(
         }
     }
 
-    private async Task ApplySyncCollectionAsync(CalendarInfo cal, SyncCollectionResult sync, SyncReport report, CancellationToken ct)
+    private async Task ApplySyncCollectionAsync(CalendarInfo cal, SyncCollectionResult sync, SyncReport report, CancellationToken ct, bool fullSync = false)
     {
+        // CQ-009②: a full (empty-token) sync-collection response enumerates the *current*
+        // members of the collection, so it doubles as the authoritative server state. Track
+        // which hrefs are present — and which are unknown — so rows the server deleted while
+        // we were offline can be reaped afterwards. Incremental responses are NOT
+        // authoritative (an absent href is not a deletion there), so nothing is tracked.
+        HashSet<string>? present = fullSync ? new(StringComparer.OrdinalIgnoreCase) : null;
+        HashSet<string>? unresolved = fullSync ? new(StringComparer.OrdinalIgnoreCase) : null;
+
         foreach (var entry in sync.Changed)
         {
             await ApplyRemoteAsync(cal, entry, report, ct).ConfigureAwait(false);
+            present?.Add(entry.Href);
         }
 
         foreach (var href in sync.Deleted)
         {
             await ApplyRemoteDeletionAsync(href, report, ct).ConfigureAwait(false);
+        }
+
+        if (sync.MissingDataHrefs is { Count: > 0 })
+        {
+            foreach (var href in sync.MissingDataHrefs)
+            {
+                // CQ-008: the server listed this href as changed but sent no calendar-data
+                // (truncated response / non-compliant server). Skipping it here while still
+                // adopting the new token would lose the change forever — the same G5-21
+                // principle as the parse-failure quarantine in ApplyRemoteAsync. Refetch
+                // the resource explicitly by href instead.
+                RemoteEventEntry? entry;
+                try
+                {
+                    entry = await client.GetEventAsync(cal, href, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Refetch failed: surface it like a parse failure. The token still
+                    // advances (one unfetchable resource must not roll back the whole
+                    // sync), but the href is recorded as *unresolved* so the full-sync
+                    // reconciliation below cannot reap its local row — its server state is
+                    // unknown, not "absent".
+                    report.Errors.Add($"Refetch of '{href}' on calendar '{cal.DisplayName}' failed: {ex.Message}");
+                    unresolved?.Add(href);
+                    continue;
+                }
+
+                if (entry is null)
+                {
+                    // GET 404/410: the resource is gone after all — treat as a deletion.
+                    await ApplyRemoteDeletionAsync(href, report, ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                await ApplyRemoteAsync(cal, entry, report, ct).ConfigureAwait(false);
+                present?.Add(href);
+            }
+        }
+
+        // Reconcile BEFORE adopting the new token: if reconciliation fails mid-way, the
+        // token is not persisted and the next run repeats the full sync — the safe direction.
+        // Persisting the token first would freeze unreaped zombies behind an incremental
+        // token that never lists them again.
+        if (fullSync)
+        {
+            await ReconcileFullSyncAsync(cal, present!, unresolved!, report, ct).ConfigureAwait(false);
         }
 
         if (!string.IsNullOrEmpty(sync.NewSyncToken))
@@ -148,6 +211,40 @@ public sealed class SyncEngine(
             cal.UpdatedAt = DateTimeOffset.UtcNow;
             await calendars.UpsertAsync(cal, ct).ConfigureAwait(false);
             await syncState.UpsertSyncTokenAsync(cal.Id, cal.SyncToken, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>CQ-009②: after a full (empty-token) sync, reap local rows the server no
+    /// longer has. RFC 6578 full responses contain only current members, so a local row
+    /// whose <c>RemoteHref</c> is absent from the response corresponds to a server-side
+    /// deletion that happened while this client was offline (or held an invalidated token).
+    /// Candidates are strictly guarded: only <see cref="SyncStatus.Clean"/> rows with a known
+    /// RemoteHref — dirty rows (New/Modified/Conflict) carry pending local state that push
+    /// owns, DeletedLocal rows have their own delete flow, Error rows are quarantine, and
+    /// never-uploaded rows (RemoteHref null) have no server counterpart at all. Hrefs whose
+    /// body-refetch failed are excluded (state unknown — reaping them would destroy data on
+    /// a transient error).</summary>
+    private async Task ReconcileFullSyncAsync(CalendarInfo cal, HashSet<string> present, HashSet<string> unresolved, SyncReport report, CancellationToken ct)
+    {
+        // All non-deleted rows of this calendar. The ±infinite window works around the
+        // repository not having an unbounded query: ISO-8601 round-trip timestamps compare
+        // chronologically as TEXT, so MinValue/MaxValue also cover rows outside the ±180d
+        // pull window (GetInRangeAsync already excludes soft-deleted / DeletedLocal rows).
+        var rows = await events.GetInRangeAsync([cal.Id], DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct).ConfigureAwait(false);
+        foreach (var row in rows)
+        {
+            if (row.SyncStatus != SyncStatus.Clean || string.IsNullOrEmpty(row.RemoteHref))
+            {
+                continue;
+            }
+
+            if (present.Contains(row.RemoteHref) || unresolved.Contains(row.RemoteHref))
+            {
+                continue;
+            }
+
+            await events.HardDeleteAsync(row.Id, ct).ConfigureAwait(false);
+            report.RemoteDeleted++;
         }
     }
 
@@ -329,7 +426,13 @@ public sealed class SyncEngine(
 
         if (op.Kind == SyncOperationKind.Delete)
         {
-            if (!string.IsNullOrEmpty(evt.RemoteHref) && evt.ETag is not null)
+            // CQ-014: a row with a known RemoteHref must always get the server-side DELETE —
+            // servers are allowed to omit getetag (RFC 4791), and the old ETag-guard skipped
+            // the DELETE while still counting Pushed++, so the next pull silently
+            // resurrected the event. Without an ETag the DELETE is unconditional (null
+            // If-Match); DeleteEventAsync already treats 404 as already-gone. Rows with no
+            // RemoteHref were never uploaded — a local hard delete completes them.
+            if (!string.IsNullOrEmpty(evt.RemoteHref))
             {
                 await client.DeleteEventAsync(cal, evt.RemoteHref, evt.ETag, ct).ConfigureAwait(false);
             }
@@ -342,6 +445,51 @@ public sealed class SyncEngine(
 
         var ifMatch = op.Kind == SyncOperationKind.Update ? evt.ETag : null;
         var result = await client.PutEventAsync(cal, evt, ifMatch, ct).ConfigureAwait(false);
+
+        // CQ-003: the PUT round-trip spans hundreds of ms to seconds — long enough for the
+        // user to edit or delete the event locally. Writing the pre-PUT snapshot back
+        // unconditionally would clobber that edit AND (because EnqueueAsync REUSES the
+        // still-pending op row) delete its outbox op in the same stroke — losing the edit on
+        // both sides with no trace. Re-read the row and only write back when nothing moved.
+        var current = await events.GetAsync(evt.Id, ct).ConfigureAwait(false);
+        if (current is null)
+        {
+            // Hard-deleted while the PUT was in flight (EventService hard-deletes never-uploaded
+            // rows; the events→outbox FK cascade already dropped the pending Create op). Do NOT
+            // write the snapshot back — that would resurrect the event the user just deleted.
+            // Retract the just-uploaded server copy instead: without this compensation the next
+            // pull would re-import the event we just pushed, resurrecting it anyway.
+            if (!string.IsNullOrEmpty(result.Href) && !string.IsNullOrEmpty(result.ETag))
+            {
+                try
+                {
+                    await client.DeleteEventAsync(cal, result.Href, result.ETag, ct).ConfigureAwait(false);
+                }
+                catch (CalDavException ex)
+                {
+                    // Best effort: the local row is gone either way; surface the orphan instead
+                    // of silently pretending the server state is clean.
+                    report.Errors.Add($"Compensating delete after mid-PUT deletion of '{evt.Uid}' failed: {ex.Message}");
+                }
+            }
+
+            // No-op when the FK cascade already removed it; keeps fake/in-memory stores tidy.
+            await operations.RemoveAsync(op.Id, ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (current.UpdatedAt > evt.UpdatedAt || current.SyncStatus == SyncStatus.DeletedLocal)
+        {
+            // Concurrent edit (or soft delete — its UpdatedAt bump covers the same check, the
+            // status test is defense in depth). Keep the user's row exactly as stored; merge
+            // only the server assignment (href/etag) and KEEP the reused op row so the edit is
+            // pushed on the next run. Marking Clean / removing the op here is precisely the
+            // silent two-sided loss CQ-003 describes.
+            var etag = !string.IsNullOrEmpty(result.ETag) ? result.ETag : current.ETag;
+            await events.UpdateSyncFieldsAsync(evt.Id, result.Href, etag, ct).ConfigureAwait(false);
+            return;
+        }
+
         evt.RemoteHref = result.Href;
         if (!string.IsNullOrEmpty(result.ETag))
         {
@@ -365,8 +513,9 @@ public sealed class SyncEngine(
         }
 
         // 412 Precondition Failed ⇒ optimistic-concurrency mismatch: another device changed it
-        // first. Surface as conflict rather than retrying.
-        if (ex.StatusCode == 412 || ex.Message.Contains(" 412 ", StringComparison.Ordinal))
+        // first. Surface as conflict rather than retrying. The typed StatusCode is the only
+        // signal — never sniff exception message text (CalDavException always carries the code).
+        if (ex.StatusCode == 412)
         {
             evt.SyncStatus = SyncStatus.Conflict;
             evt.UpdatedAt = DateTimeOffset.UtcNow;

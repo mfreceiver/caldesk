@@ -229,6 +229,245 @@ public sealed class SyncEngineUnitTests
         Assert.True(report.Pulled >= 1);
     }
 
+    // ---- CQ-008: bodyless sync-collection entries are refetched, never dropped ---------
+
+    [Fact]
+    public async Task Bodyless_Sync_Entry_Is_Refetched_And_Stored()
+    {
+        var cal = Cal("work");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            new[] { new RemoteEventEntry("/work/a.ics", "\"v1\"", OneEventIcs) },
+            Array.Empty<string>(),
+            "#t1",
+            Supported: true,
+            MissingDataHrefs: new[] { "/work/nodata.ics" });
+        client.GetHandler = (c, href) => new RemoteEventEntry(href, "\"v2\"", OtherEventIcs);
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), new FakeOpRepo(), client);
+        var report = await engine.SyncAsync();
+
+        // The bodyless href was explicitly refetched…
+        Assert.Equal(new[] { "/work/nodata.ics" }, client.GetHrefs);
+        // …and its event landed in the store instead of being lost behind the token.
+        var fetched = await events.FindByRemoteHrefAsync("/work/nodata.ics");
+        Assert.NotNull(fetched);
+        Assert.Equal("evt-b", fetched!.Uid);
+        Assert.True(report.Pulled >= 2);
+    }
+
+    [Fact]
+    public async Task Bodyless_Sync_Entry_Gone_On_Server_Is_Treated_As_Deletion()
+    {
+        var cal = Cal("work");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+        await events.UpsertAsync(Row(cal, "/work/nodata.ics", SyncStatus.Clean));
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            Array.Empty<RemoteEventEntry>(),
+            Array.Empty<string>(),
+            "#t1",
+            Supported: true,
+            MissingDataHrefs: new[] { "/work/nodata.ics" });
+        // GET answers 404: the resource vanished between the REPORT and the refetch.
+        client.GetHandler = (c, href) => null;
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), new FakeOpRepo(), client);
+        var report = await engine.SyncAsync();
+
+        Assert.Equal(new[] { "/work/nodata.ics" }, client.GetHrefs);
+        Assert.Null(await events.FindByRemoteHrefAsync("/work/nodata.ics"));
+        Assert.True(report.RemoteDeleted >= 1);
+    }
+
+    [Fact]
+    public async Task Bodyless_Sync_Entry_Refetch_Failure_Is_Recorded_And_Token_Advances()
+    {
+        var cal = Cal("work");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+        await events.UpsertAsync(Row(cal, "/work/nodata.ics", SyncStatus.Clean));
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            Array.Empty<RemoteEventEntry>(),
+            Array.Empty<string>(),
+            "#t1",
+            Supported: true,
+            MissingDataHrefs: new[] { "/work/nodata.ics" });
+        client.GetHandler = (c, href) => throw new CalDavException("GET /work/nodata.ics failed: 507 insufficient storage", 507);
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), new FakeOpRepo(), client);
+        var report = await engine.SyncAsync();
+
+        // Surfaced like a parse failure — never silently skipped.
+        Assert.Contains(report.Errors, e => e.Contains("Refetch", StringComparison.Ordinal)
+                                         && e.Contains("/work/nodata.ics", StringComparison.Ordinal));
+        // The token still advances (no rollback for one unfetchable resource)…
+        Assert.Equal("#t1", cal.SyncToken);
+        // …and the local row survives: its server state is UNKNOWN (refetch errored), so the
+        // full-sync reconciliation must not reap it as a deletion.
+        Assert.NotNull(await events.FindByRemoteHrefAsync("/work/nodata.ics"));
+    }
+
+    // ---- CQ-009②: full sync reconciles server-side deletions --------------------------
+
+    [Fact]
+    public async Task FullSync_Reaps_Clean_Rows_Absent_From_Server()
+    {
+        var cal = Cal("work");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+        // Zombie: Clean row whose href the (full) response does not list — the server deleted
+        // it while this client was offline / held an invalidated token.
+        await events.UpsertAsync(Row(cal, "/work/zombie.ics", SyncStatus.Clean));
+        // Dirty rows must never be touched by reconciliation — push owns them.
+        await events.UpsertAsync(Row(cal, "/work/dirty.ics", SyncStatus.ModifiedLocal));
+        // Never-uploaded row: no server counterpart at all.
+        var localOnly = Row(cal, null, SyncStatus.NewLocal);
+        await events.UpsertAsync(localOnly);
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            new[] { new RemoteEventEntry("/work/a.ics", "\"v1\"", OneEventIcs) },
+            Array.Empty<string>(),
+            "#t1",
+            Supported: true);
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), new FakeOpRepo(), client);
+        var report = await engine.SyncAsync();
+
+        Assert.Null(await events.FindByRemoteHrefAsync("/work/zombie.ics"));
+        Assert.NotNull(await events.FindByRemoteHrefAsync("/work/dirty.ics"));
+        Assert.NotNull(await events.GetAsync(localOnly.Id));
+        Assert.True(report.RemoteDeleted >= 1);
+        Assert.Equal("#t1", cal.SyncToken);
+    }
+
+    [Fact]
+    public async Task Incremental_Sync_Does_Not_Reap_Absent_Rows()
+    {
+        // Lock the counter-case: on an INCREMENTAL sync an absent href is not a deletion
+        // (RFC 6578 — deletions are reported as 404 responses) — only the full sync is
+        // authoritative. Reaping here would wipe the local store on every no-op sync.
+        var cal = Cal("work", supportsSync: true, token: "#have");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+        await events.UpsertAsync(Row(cal, "/work/keep.ics", SyncStatus.Clean));
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            Array.Empty<RemoteEventEntry>(),
+            Array.Empty<string>(),
+            "#t2",
+            Supported: true);
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), new FakeOpRepo(), client);
+        var report = await engine.SyncAsync();
+
+        Assert.NotNull(await events.FindByRemoteHrefAsync("/work/keep.ics"));
+        Assert.Equal(0, report.RemoteDeleted);
+    }
+
+    // ---- CQ-014: delete push without ETag ----------------------------------------------
+
+    [Fact]
+    public async Task Delete_Without_ETag_Sends_Unconditional_Delete()
+    {
+        var cal = Cal("work");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+        var evt = new CalendarEvent
+        {
+            Id = Guid.NewGuid(),
+            CalendarId = cal.Id,
+            Uid = "del-1",
+            RemoteHref = "/work/del-1.ics",
+            ETag = null, // ETag-less server (RFC 4791 allows getetag to be absent)
+            Summary = "D",
+            StartUtc = DateTimeOffset.UtcNow,
+            EndUtc = DateTimeOffset.UtcNow.AddHours(1),
+            SyncStatus = SyncStatus.DeletedLocal,
+        };
+        await events.UpsertAsync(evt);
+        var ops = new FakeOpRepo();
+        await ops.EnqueueAsync(new SyncOperation { Id = 1, EventId = evt.Id, Kind = SyncOperationKind.Delete });
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            Array.Empty<RemoteEventEntry>(), Array.Empty<string>(), "#t1", Supported: true);
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), ops, client);
+        var report = await engine.SyncAsync();
+
+        // The remote DELETE happened — with NO If-Match (unconditional).
+        var call = Assert.Single(client.DeletedCalls);
+        Assert.Equal("/work/del-1.ics", call.Href);
+        Assert.Null(call.IfMatch);
+        // Local row gone and the push counted once.
+        Assert.Null(await events.GetAsync(evt.Id));
+        Assert.Equal(1, report.Pushed);
+    }
+
+    // ---- hygiene #6: 412 conflict detection is typed-StatusCode only -------------------
+
+    [Fact]
+    public async Task Precondition_Failure_Is_Detected_Via_Typed_StatusCode()
+    {
+        // Lock the ONLY supported detection path: CalDavException.StatusCode == 412. The
+        // former `ex.Message.Contains(" 412 ")` companion sniff is dead weight — every
+        // CalDavException the client throws carries the code — and message-text matching is
+        // brittle against localized/renamed status reasons.
+        var cal = Cal("work");
+        var events = new FakeEventRepo();
+        var calRepo = new FakeCalendarRepo(new[] { cal });
+        var evt = new CalendarEvent
+        {
+            Id = Guid.NewGuid(),
+            CalendarId = cal.Id,
+            Uid = "conflict-1",
+            RemoteHref = "/work/conflict-1.ics",
+            ETag = "\"v0\"",
+            Summary = "C",
+            StartUtc = DateTimeOffset.UtcNow,
+            EndUtc = DateTimeOffset.UtcNow.AddHours(1),
+            SyncStatus = SyncStatus.ModifiedLocal,
+        };
+        await events.UpsertAsync(evt);
+        var ops = new FakeOpRepo();
+        await ops.EnqueueAsync(new SyncOperation { Id = 1, EventId = evt.Id, Kind = SyncOperationKind.Update });
+
+        var client = new FakeCalDavClient();
+        client.SyncHandler = (c, token) => new SyncCollectionResult(
+            Array.Empty<RemoteEventEntry>(), Array.Empty<string>(), "#t1", Supported: true);
+        client.PutHandler = e => throw new CalDavException("REPORT rejected the PUT: Precondition Failed", 412);
+
+        var engine = new SyncEngine(events, calRepo, new FakeSyncStateRepo(), ops, client);
+        var report = await engine.SyncAsync();
+
+        var after = await events.GetAsync(evt.Id);
+        Assert.Equal(SyncStatus.Conflict, after!.SyncStatus);
+        Assert.Contains(evt.Id, report.ConflictEventIds);
+    }
+
+    private static CalendarEvent Row(CalendarInfo cal, string? href, SyncStatus status) => new()
+    {
+        Id = Guid.NewGuid(),
+        CalendarId = cal.Id,
+        Uid = $"evt-{Guid.NewGuid():N}",
+        RemoteHref = href,
+        ETag = href is null ? null : "\"v0\"",
+        Summary = "R",
+        StartUtc = DateTimeOffset.UtcNow,
+        EndUtc = DateTimeOffset.UtcNow.AddHours(1),
+        SyncStatus = status,
+    };
+
     // ========================================================================
     // Minimal in-memory fakes. Kept intentionally small — only the surface area
     // the SyncEngine uses.
@@ -241,6 +480,14 @@ public sealed class SyncEngineUnitTests
         public Func<CalendarInfo, CalendarQueryResult>? QueryHandler { get; set; }
         public Func<CalendarEvent, PutResult>? PutHandler { get; set; }
 
+        // CQ-008: single-resource refetch. Records every href asked for; the handler decides
+        // the outcome (entry / null=404 / throw=error).
+        public Func<CalendarInfo, string, RemoteEventEntry?>? GetHandler { get; set; }
+        public List<string> GetHrefs { get; } = new();
+
+        // CQ-014: records the exact DELETE calls (href + If-Match actually passed).
+        public List<(string Href, string? IfMatch)> DeletedCalls { get; } = new();
+
         public Task<IReadOnlyList<CalendarInfo>> DiscoverCalendarsAsync(CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<CalendarInfo>>(Array.Empty<CalendarInfo>());
 
@@ -252,8 +499,17 @@ public sealed class SyncEngineUnitTests
         public Task<PutResult> PutEventAsync(CalendarInfo calendar, CalendarEvent evt, string? ifMatchEtag, CancellationToken ct = default)
             => Task.FromResult(PutHandler!(evt));
 
-        public Task DeleteEventAsync(CalendarInfo calendar, string href, string ifMatchEtag, CancellationToken ct = default)
-            => Task.CompletedTask;
+        public Task DeleteEventAsync(CalendarInfo calendar, string href, string? ifMatchEtag, CancellationToken ct = default)
+        {
+            DeletedCalls.Add((href, ifMatchEtag));
+            return Task.CompletedTask;
+        }
+
+        public Task<RemoteEventEntry?> GetEventAsync(CalendarInfo calendar, string href, CancellationToken ct = default)
+        {
+            GetHrefs.Add(href);
+            return Task.FromResult(GetHandler?.Invoke(calendar, href));
+        }
 
         public Task<SyncCollectionResult> SyncCollectionAsync(CalendarInfo calendar, string? syncToken, CancellationToken ct = default)
             => Task.FromResult(SyncHandler!(calendar, syncToken));
@@ -321,9 +577,49 @@ public sealed class SyncEngineUnitTests
             => Task.FromResult<IReadOnlyList<CalendarEvent>>(Array.Empty<CalendarEvent>());
 
         public Task UpsertAsync(CalendarEvent evt, CancellationToken ct = default) { _byId[evt.Id] = evt; return Task.CompletedTask; }
+
+        // CQ-003: sync-fields-only update. The fake stores references, so this must clone —
+        // otherwise it would mutate the very snapshot the engine still holds.
+        public Task UpdateSyncFieldsAsync(Guid id, string? remoteHref, string? etag, CancellationToken ct = default)
+        {
+            if (_byId.TryGetValue(id, out var e))
+            {
+                var copy = Clone(e);
+                copy.RemoteHref = remoteHref;
+                copy.ETag = etag;
+                _byId[id] = copy;
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task MarkDeletedAsync(Guid id, CancellationToken ct = default) { if (_byId.TryGetValue(id, out var e)) e.SyncStatus = SyncStatus.DeletedLocal; return Task.CompletedTask; }
         public Task HardDeleteAsync(Guid id, CancellationToken ct = default) { _byId.Remove(id); return Task.CompletedTask; }
         public Task HardDeleteAllAsync(CancellationToken ct = default) { _byId.Clear(); return Task.CompletedTask; }
+
+        private static CalendarEvent Clone(CalendarEvent e) => new()
+        {
+            Id = e.Id,
+            CalendarId = e.CalendarId,
+            Uid = e.Uid,
+            RemoteHref = e.RemoteHref,
+            ETag = e.ETag,
+            ICalendarData = e.ICalendarData,
+            Summary = e.Summary,
+            Description = e.Description,
+            Location = e.Location,
+            IsAllDay = e.IsAllDay,
+            StartUtc = e.StartUtc,
+            EndUtc = e.EndUtc,
+            TimeZoneId = e.TimeZoneId,
+            IsFloating = e.IsFloating,
+            RecurrenceRule = e.RecurrenceRule,
+            RecurrenceId = e.RecurrenceId,
+            SyncStatus = e.SyncStatus,
+            DeletedAt = e.DeletedAt,
+            CreatedAt = e.CreatedAt,
+            UpdatedAt = e.UpdatedAt,
+        };
     }
 
     private sealed class FakeSyncStateRepo : ISyncStateRepository

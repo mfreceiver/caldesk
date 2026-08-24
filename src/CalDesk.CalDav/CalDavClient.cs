@@ -202,14 +202,23 @@ public sealed class CalDavClient : ICalDavClient
         return new PutResult(path, etag);
     }
 
-    public async Task DeleteEventAsync(CalendarInfo calendar, string href, string ifMatchEtag, CancellationToken ct = default)
+    public async Task DeleteEventAsync(CalendarInfo calendar, string href, string? ifMatchEtag, CancellationToken ct = default)
     {
         using var resp = await SendRawAsync(
             "DELETE",
             href,
             body: null,
             mediaType: null,
-            configure: req => req.Headers.IfMatch.Add(new EntityTagHeaderValue(ifMatchEtag)),
+            configure: req =>
+            {
+                // CQ-014: a null If-Match is an *unconditional* delete (RFC 4918 §10.6) —
+                // required for servers that never return getetag; skipping the DELETE there
+                // would let the next pull resurrect the event.
+                if (ifMatchEtag is not null)
+                {
+                    req.Headers.IfMatch.Add(new EntityTagHeaderValue(ifMatchEtag));
+                }
+            },
             ct: ct).ConfigureAwait(false);
 
         if (!resp.IsSuccessStatusCode && resp.StatusCode != HttpStatusCode.NotFound)
@@ -218,6 +227,29 @@ public sealed class CalDavClient : ICalDavClient
                 $"DELETE {href} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}",
                 (int)resp.StatusCode);
         }
+    }
+
+    /// <summary>Fetch a single resource by href via <c>GET</c>. Returns null when the server
+    /// reports the resource gone (404/410); throws <see cref="CalDavException"/> on other
+    /// failures. Used by the sync engine to recover sync-collection entries that arrived
+    /// without their calendar-data body (CQ-008).</summary>
+    public async Task<RemoteEventEntry?> GetEventAsync(CalendarInfo calendar, string href, CancellationToken ct = default)
+    {
+        using var resp = await SendRawAsync("GET", href, body: null, mediaType: null, configure: null, ct: ct).ConfigureAwait(false);
+        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+        {
+            return null;
+        }
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            throw new CalDavException(
+                $"GET {href} failed: {(int)resp.StatusCode} {resp.ReasonPhrase}",
+                (int)resp.StatusCode);
+        }
+
+        var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return new RemoteEventEntry(href, NormalizeEtag(resp.Headers.ETag?.Tag), body);
     }
 
     public async Task<SyncCollectionResult> SyncCollectionAsync(CalendarInfo calendar, string? syncToken, CancellationToken ct = default)
@@ -230,19 +262,46 @@ public sealed class CalDavClient : ICalDavClient
         {
             xml = await SendAsync("REPORT", path, body, XmlContentType, depth: "1", ct: ct).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (CalDavException ex) when (ex.StatusCode is 405 or 501)
         {
+            // CQ-009①: only a definitive protocol-level rejection — 405 Method Not Allowed /
+            // 501 Not Implemented on the REPORT itself — means "this server does not
+            // implement sync-collection"; the engine then falls back to calendar-query.
+            // Everything else must propagate: the previous blanket catch of
+            // HttpRequestException turned transient network failures into Supported=false,
+            // making the engine drop its incremental token and silently re-pull the whole
+            // collection on every blip (RFC 6578 failures should be retried, not reset).
             return new SyncCollectionResult(Array.Empty<RemoteEventEntry>(), Array.Empty<string>(), null, Supported: false);
         }
 
         var ms = MultistatusReader.Read(xml);
-        var changed = ms.Responses
-            .Where(r => !r.IsNotFound && !string.IsNullOrEmpty(r.Props.GetValueOrDefault("calendar-data")))
-            .Select(r => new RemoteEventEntry(r.Href, NormalizeEtag(r.Props.GetValueOrDefault("getetag")), r.Props.GetValueOrDefault("calendar-data") ?? string.Empty))
-            .ToList();
+
+        var changed = new List<RemoteEventEntry>();
+        var missingData = new List<string>();
+        foreach (var r in ms.Responses)
+        {
+            if (r.IsNotFound)
+            {
+                continue; // reported deletions are collected separately below
+            }
+
+            var data = r.Props.GetValueOrDefault("calendar-data");
+            if (string.IsNullOrEmpty(data))
+            {
+                // CQ-008: a changed href that arrived without its body. Filtering it out
+                // here (as before) let the engine advance the sync token past a change it
+                // never saw — permanently losing the resource. Surface it so the engine
+                // refetches the resource by href before adopting the new token.
+                missingData.Add(r.Href);
+                continue;
+            }
+
+            changed.Add(new RemoteEventEntry(r.Href, NormalizeEtag(r.Props.GetValueOrDefault("getetag")), data));
+        }
+
         var deleted = ms.Responses.Where(r => r.IsNotFound).Select(r => r.Href).ToList();
 
-        return new SyncCollectionResult(changed, deleted, ms.SyncToken, Supported: true);
+        return new SyncCollectionResult(changed, deleted, ms.SyncToken, Supported: true, missingData);
     }
 
     public async Task<CalendarInfo> RefreshCalendarAsync(CalendarInfo calendar, CancellationToken ct = default)

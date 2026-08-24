@@ -759,50 +759,58 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        var s = _settingsSvc.Current;
-
-        // T10/C2: 删 `!s.LockedPosition` 守卫. 锁定状态只影响 *用户能否拖动*; 不应阻止
-        // 退出时持久化当前位置. 锁定期间若用户通过拖屏幕外 / OpenSettings 改坐标,
-        // 这些值仍需真实保存. 保留 NaN/Infinity 防御 — WPF 未 laid-out 时 Left/Top
-        // 可能是 NaN, 此时不动 settings, 让下次启动从最近一次有效值恢复.
-        if (_week is { } w)
+        // CQ-010: OnStartup can throw before _settingsSvc is assigned (e.g. SQLite fails to
+        // open), and its catch calls Shutdown(-1) — which still routes here. Dereferencing
+        // the unassigned field threw a *second* crash that skipped every cleanup below.
+        // Only the settings-persistence block needs the service; cleanup runs regardless.
+        if (_settingsSvc is not null)
         {
-            var left = w.Left;
-            var top = w.Top;
-            if (!double.IsNaN(left) && !double.IsInfinity(left) &&
-                !double.IsNaN(top) && !double.IsInfinity(top))
+            var s = _settingsSvc.Current;
+
+            // T10/C2: 删 `!s.LockedPosition` 守卫. 锁定状态只影响 *用户能否拖动*; 不应阻止
+            // 退出时持久化当前位置. 锁定期间若用户通过拖屏幕外 / OpenSettings 改坐标,
+            // 这些值仍需真实保存. 保留 NaN/Infinity 防御 — WPF 未 laid-out 时 Left/Top
+            // 可能是 NaN, 此时不动 settings, 让下次启动从最近一次有效值恢复.
+            if (_week is { } w)
             {
-                s.WindowLeft = left;
-                s.WindowTop = top;
+                var left = w.Left;
+                var top = w.Top;
+                if (!double.IsNaN(left) && !double.IsInfinity(left) &&
+                    !double.IsNaN(top) && !double.IsInfinity(top))
+                {
+                    s.WindowLeft = left;
+                    s.WindowTop = top;
+                }
             }
-        }
 
-        if (_month is { } mw)
-        {
-            var left = mw.Left;
-            var top = mw.Top;
-            if (!double.IsNaN(left) && !double.IsInfinity(left) &&
-                !double.IsNaN(top) && !double.IsInfinity(top))
+            if (_month is { } mw)
             {
-                s.MonthWindowLeft = left;
-                s.MonthWindowTop = top;
+                var left = mw.Left;
+                var top = mw.Top;
+                if (!double.IsNaN(left) && !double.IsInfinity(left) &&
+                    !double.IsNaN(top) && !double.IsInfinity(top))
+                {
+                    s.MonthWindowLeft = left;
+                    s.MonthWindowTop = top;
+                }
             }
+
+            // Persist DIU window sizes (week + month). NaN stays NaN until the user resizes once.
+            if (_week is { } weekWin)
+            {
+                s.WindowWidth = weekWin.Width;
+                s.WindowHeight = weekWin.Height;
+            }
+
+            if (_month is { } monthWin)
+            {
+                s.MonthWindowWidth = monthWin.Width;
+                s.MonthWindowHeight = monthWin.Height;
+            }
+
+            _settingsSvc.Save(s);
         }
 
-        // Persist DIU window sizes (week + month). NaN stays NaN until the user resizes once.
-        if (_week is { } weekWin)
-        {
-            s.WindowWidth = weekWin.Width;
-            s.WindowHeight = weekWin.Height;
-        }
-
-        if (_month is { } monthWin)
-        {
-            s.MonthWindowWidth = monthWin.Width;
-            s.MonthWindowHeight = monthWin.Height;
-        }
-
-        _settingsSvc.Save(s);
         _themeWatcher?.Dispose();
         _dayChangeWatcher?.Dispose();
         _reminders?.Dispose();

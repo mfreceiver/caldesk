@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CalDesk.App.Models;
 using CalDesk.Core.Models;
@@ -19,7 +20,13 @@ public sealed class ReminderService : IDisposable
     private readonly Func<AppSettings> _settings;
     private readonly Action<Notification> _notify;
     private readonly Timer _timer;
-    private readonly HashSet<string> _fired = new();
+
+    // CQ-011: CheckAsync does DB round-trips + recurrence expansion and can exceed the 30s
+    // timer period (e.g. under contention with the global ExpandLock), letting the next
+    // tick re-enter concurrently — undefined HashSet.Add behaviour and duplicate
+    // notifications. _fired is made concurrent and _checking is a cheap re-entry gate.
+    private readonly ConcurrentDictionary<string, byte> _fired = new();
+    private int _checking;
 
     public ReminderService(StorageServices store, IRecurrenceExpander expander, Func<AppSettings> settings, Action<Notification> notify)
     {
@@ -34,6 +41,13 @@ public sealed class ReminderService : IDisposable
 
     private async Task CheckAsync()
     {
+        // CQ-011: one pass at a time — a tick landing while a previous pass is still
+        // awaiting storage/expansion is dropped instead of overlapping it.
+        if (Interlocked.Exchange(ref _checking, 1) == 1)
+        {
+            return;
+        }
+
         try
         {
             var now = DateTimeOffset.UtcNow;
@@ -69,7 +83,7 @@ public sealed class ReminderService : IDisposable
                     if (fire <= now && now < fire.AddMinutes(2) && now <= occ.StartUtc)
                     {
                         var key = $"{evt.Uid}@{occ.StartUtc:O}";
-                        if (_fired.Add(key))
+                        if (_fired.TryAdd(key, 0))
                         {
                             var local = TimeZoneInfo.ConvertTime(occ.StartUtc, TimeZoneInfo.Local);
                             _notify(new Notification(evt.Summary, local.ToString("HH:mm") + " 开始", evt.Id));
@@ -81,6 +95,10 @@ public sealed class ReminderService : IDisposable
         catch
         {
             // Reminders are best-effort; never crash the host.
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _checking, 0);
         }
     }
 

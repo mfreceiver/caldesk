@@ -56,8 +56,6 @@ public sealed class AppSettings
 
     public Guid? DefaultCalendarId { get; set; }
 
-    public DayOfWeek WeekStart { get; set; } = DayOfWeek.Monday;
-
     /// <summary>Font size tier; swapped at runtime via <c>App.ApplyFontSize</c>.</summary>
     public FontSizeLevel FontSize { get; set; } = FontSizeLevel.Small;
 

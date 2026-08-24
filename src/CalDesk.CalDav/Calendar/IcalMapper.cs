@@ -38,7 +38,7 @@ public static class IcalMapper
             var events = new List<CalendarEvent>();
             foreach (var ve in cal.Events)
             {
-                events.Add(Map(ve, calendarId, href, etag, raw));
+                events.Add(Map(ve, calendarId, href, etag, raw, cal.TimeZones.ToList()));
             }
 
             return new CalendarParseResult(Success: true, Events: events, Error: null, Href: href, ETag: etag);
@@ -73,12 +73,13 @@ public static class IcalMapper
 
     // ---- parse -------------------------------------------------------------
 
-    private static CalendarEvent Map(IcalEvent ve, Guid calendarId, string? href, string? etag, string raw)
+    private static CalendarEvent Map(IcalEvent ve, Guid calendarId, string? href, string? etag, string raw,
+        IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone> vTimeZones)
     {
         var start = ve.DtStart;
         var isAllDay = start is not null && !start.HasTime;
-        var startUtc = ToUtc(start);
-        var endUtc = ResolveEnd(ve, start, startUtc, isAllDay);
+        var startUtc = ToUtc(start, vTimeZones);
+        var endUtc = ResolveEnd(ve, start, startUtc, isAllDay, vTimeZones);
 
         return new CalendarEvent
         {
@@ -122,6 +123,11 @@ public static class IcalMapper
     /// (independent of the machine's TimeZoneInfo.Local). Production callers use the single-arg
     /// entry point, which passes TimeZoneInfo.Local.</summary>
     internal static DateTime CalDateTimeToUtc(CalDateTime dt, TimeZoneInfo floatingTimeZone)
+        => CalDateTimeToUtc(dt, floatingTimeZone, null);
+
+    /// <summary>Full overload with the resource's VTIMEZONE components for the last-resort
+    /// offset fallback (CQ-006).</summary>
+    internal static DateTime CalDateTimeToUtc(CalDateTime dt, TimeZoneInfo floatingTimeZone, IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones)
     {
         ArgumentNullException.ThrowIfNull(dt);
         ArgumentNullException.ThrowIfNull(floatingTimeZone);
@@ -150,12 +156,173 @@ public static class IcalMapper
             return ConvertCivilToUtc(civil, floatingTimeZone);
         }
 
-        // TZID DATE-TIME: convert the raw wall-clock exactly once in the named zone. Let an
-        // unknown TZID throw (TimeZoneNotFoundException / InvalidTimeZoneException) so the
-        // caller's parse-failure quarantine surfaces it, rather than silently reinterpreting it
-        // as the machine-local zone (which would corrupt the time without notice).
-        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(dt.TzId!);
-        return ConvertCivilToUtc(civil, timeZone);
+        // TZID DATE-TIME, three-tier resolution (CQ-006):
+        //  1. system lookup on the literal ID (normal case),
+        //  2. system lookup on the ID with a legacy global-form prefix stripped
+        //     ("/mozilla.org/<build>/Europe/Berlin" → "Europe/Berlin"),
+        //  3. fixed-offset conversion from the resource's own VTIMEZONE definition.
+        // All three failing still throws — an unresolvable zone must surface as a parse
+        // failure (quarantine), never silently reinterpret as the machine-local zone.
+        if (TryResolveSystemTimeZone(dt.TzId!) is { } timeZone)
+        {
+            return ConvertCivilToUtc(civil, timeZone);
+        }
+
+        if (ConvertViaVTimeZone(dt, civil, vTimeZones) is { } viaVtz)
+        {
+            return viaVtz;
+        }
+
+        throw new TimeZoneNotFoundException($"Unknown TZID '{dt.TzId}' (no system match, no VTIMEZONE fallback).");
+    }
+
+    /// <summary>System time-zone lookup tolerating legacy global-form TZID prefixes
+    /// (CQ-006). Returns null when no candidate resolves.</summary>
+    internal static TimeZoneInfo? TryResolveSystemTimeZone(string tzId)
+    {
+        foreach (var candidate in TzIdCandidates(tzId))
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(candidate);
+            }
+            catch (Exception)
+            {
+                // TimeZoneNotFoundException (unknown id) or InvalidTimeZoneException —
+                // try the next candidate.
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Candidate IDs to try against the system tzdb, most specific first. RFC 5545
+    /// §3.8.7.5 allows a forward-slash-prefixed globally unique TZID; legacy producers
+    /// (Mozilla Sunbird, old KOrganizer/freeassociation) embed their site — and sometimes a
+    /// build number — in leading segments, e.g. "/mozilla.org/20050126_1/Europe/Berlin".
+    /// Every trailing-segment suffix of the ID is tried, longest first, so any prefix depth
+    /// resolves once the remainder is a plain IANA/Windows ID.</summary>
+    private static IEnumerable<string> TzIdCandidates(string tzId)
+    {
+        yield return tzId;
+
+        if (!tzId.StartsWith('/'))
+        {
+            yield break;
+        }
+
+        var rest = tzId.TrimStart('/');
+        while (true)
+        {
+            var slash = rest.IndexOf('/');
+            if (slash < 0)
+            {
+                yield break;
+            }
+
+            rest = rest[(slash + 1)..];
+            if (rest.Length > 0)
+            {
+                yield return rest;
+            }
+        }
+    }
+
+    /// <summary>Last-resort conversion (CQ-006 tier 3): the TZID is unknown to the system
+    /// even after prefix stripping, but the resource itself carries a VTIMEZONE defining the
+    /// zone. Converts the civil time with the offset in effect at that instant per the
+    /// VTIMEZONE's STANDARD/DAYLIGHT transitions. Returns null when no matching VTIMEZONE
+    /// exists or its blocks yield no applicable offset.</summary>
+    private static DateTime? ConvertViaVTimeZone(CalDateTime dt, DateTime civil, IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones)
+    {
+        if (vTimeZones is null || vTimeZones.Count == 0)
+        {
+            return null;
+        }
+
+        var vtz = vTimeZones.FirstOrDefault(z => string.Equals(z.TzId, dt.TzId, StringComparison.Ordinal));
+        if (vtz is null)
+        {
+            return null;
+        }
+
+        // Approximate the target instant as UTC (civil minus a provisional ±15h) — precise to
+        // well within a DST-transition margin, which is months apart.
+        var target = DateTime.SpecifyKind(civil.AddHours(-15), DateTimeKind.Utc);
+        (DateTime Transition, TimeSpan Offset)? best = null;
+        foreach (var block in vtz.TimeZoneInfos)
+        {
+            if (BlockLastTransitionUtc(block, target) is not { } transition)
+            {
+                continue;
+            }
+
+            if (best is null || transition > best.Value.Transition)
+            {
+                // A block without OffsetTo is malformed — treat as no offset (skip preference,
+                // only chosen when no better block exists).
+                best = (transition, block.OffsetTo is { } off ? BlockOffset(off) : TimeSpan.Zero);
+            }
+        }
+
+        return best is { } applicable
+            ? DateTime.SpecifyKind(civil.Subtract(applicable.Offset), DateTimeKind.Utc)
+            : null;
+    }
+
+    /// <summary>Latest transition instant of a STANDARD/DAYLIGHT block at or before
+    /// <paramref name="targetUtc"/> (UTC-approximate), or null when the block was never in
+    /// effect by then. The block's own RRULE occurrences enumerate the transitions; blocks
+    /// without a rule apply from their DTSTART. Enumeration is bounded (recent years + a
+    /// hard iteration cap) because Ical.Net streams occurrences unbounded.</summary>
+    private static DateTime? BlockLastTransitionUtc(Ical.Net.VTimeZoneInfo block, DateTime targetUtc)
+    {
+        var dtStartUtc = block.DtStart is { } ds
+            ? DateTime.SpecifyKind(ds.Value, DateTimeKind.Utc)
+            : DateTime.MinValue;
+        if (dtStartUtc > targetUtc)
+        {
+            return null;
+        }
+
+        if (block.RecurrenceRule is null)
+        {
+            return dtStartUtc;
+        }
+
+        // DST cycles repeat at most yearly — looking back two years is always enough to find
+        // the previous transition, and keeps the enumeration short for DAILY-ish edge rules.
+        var windowStart = dtStartUtc > targetUtc.AddYears(-2) ? dtStartUtc : targetUtc.AddYears(-2);
+        var last = (DateTime?)null;
+        var guard = 0;
+        foreach (var occ in block.GetOccurrences(
+                     new CalDateTime(windowStart.Year, windowStart.Month, windowStart.Day, windowStart.Hour, windowStart.Minute, windowStart.Second, "UTC"),
+                     new Ical.Net.Evaluation.EvaluationOptions()))
+        {
+            if (++guard > 2000)
+            {
+                break; // pathological rule — stop before this becomes a flood
+            }
+
+            var at = DateTime.SpecifyKind(occ.Period.StartTime.Value, DateTimeKind.Utc);
+            if (at >= targetUtc)
+            {
+                break;
+            }
+
+            last = at;
+        }
+
+        // A rule window with no occurrence before target: the block was last in effect from
+        // its own DTSTART (still ≤ target).
+        return last ?? dtStartUtc;
+    }
+
+    /// <summary>Converts an iCalendar UTC offset value (+0530 / -0800) to a TimeSpan.</summary>
+    private static TimeSpan BlockOffset(Ical.Net.DataTypes.UtcOffset offset)
+    {
+        var magnitude = new TimeSpan(Math.Abs(offset.Hours), Math.Abs(offset.Minutes), Math.Abs(offset.Seconds));
+        return offset.Positive ? magnitude : magnitude.Negate();
     }
 
     /// <summary>Converts a civil (Unspecified-kind) local time to UTC, handling DST edge cases
@@ -198,7 +365,7 @@ public static class IcalMapper
         return new DateTimeOffset(civil, offset).UtcDateTime;
     }
 
-    private static DateTimeOffset ToUtc(CalDateTime? dt)
+    private static DateTimeOffset ToUtc(CalDateTime? dt, IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones)
     {
         if (dt is null)
         {
@@ -213,15 +380,16 @@ public static class IcalMapper
             return AllDayDate.ToUtcInstant(date, TimeZoneInfo.Local);
         }
 
-        return new DateTimeOffset(CalDateTimeToUtc(dt));
+        return new DateTimeOffset(CalDateTimeToUtc(dt, TimeZoneInfo.Local, vTimeZones));
     }
 
-    private static DateTimeOffset ResolveEnd(IcalEvent ve, CalDateTime? start, DateTimeOffset startUtc, bool isAllDay)
+    private static DateTimeOffset ResolveEnd(IcalEvent ve, CalDateTime? start, DateTimeOffset startUtc, bool isAllDay,
+        IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones)
     {
         // 1) Explicit DTEND wins.
         if (ve.DtEnd is not null)
         {
-            return ToUtc(ve.DtEnd);
+            return ToUtc(ve.DtEnd, vTimeZones);
         }
 
         // 2) DURATION: end = DTSTART + DURATION (RFC 5545 §3.6.1 — DTEND and DURATION are
@@ -259,7 +427,15 @@ public static class IcalMapper
         };
         if (freq is null)
         {
-            return null;
+            // CQ-005: HOURLY/MINUTELY/SECONDLY (and any other non-subset FREQ) are RFC-5545
+            // legal but not creatable here. Pass the rule through in Ical.Net's canonical
+            // form instead of nulling it: a non-null stored rule keeps IsRecurring true and
+            // the expander walks the raw-ICS path, which supports every frequency. Fidelity
+            // note: ToString() re-emits all parts but drops DEFAULT-valued ones (INTERVAL=1,
+            // WKST=MO) and orders tokens canonically — semantically equivalent, not
+            // byte-identical to the source text.
+            var text = p.ToString();
+            return string.IsNullOrWhiteSpace(text) ? null : text;
         }
 
         var tokens = new List<string> { $"FREQ={freq}", $"INTERVAL={Math.Max(1, p.Interval)}" };
@@ -345,20 +521,7 @@ public static class IcalMapper
             ve.Location = evt.Location;
             ve.DtStart = BuildDateTime(evt, isStart: true);
             ve.DtEnd = BuildDateTime(evt, isStart: false);
-
-            // Replace recurrence rules when the local rule changed.
-            if (evt.IsRecurring)
-            {
-                var rrule = CalDesk.Core.Recurrence.RecurrencePattern.Parse(evt.RecurrenceRule)?.ToRrule();
-                if (rrule is not null)
-                {
-                    ve.RecurrenceRule = new RecurrencePattern(rrule);
-                }
-            }
-            else
-            {
-                ve.RecurrenceRule = null;
-            }
+            ApplyRecurrence(raw, ve, evt);
 
             return new CalendarSerializer().SerializeToString(cal) ?? string.Empty;
         }
@@ -366,6 +529,145 @@ public static class IcalMapper
         {
             return BuildICalendar(evt);
         }
+    }
+
+    /// <summary>
+    /// Reconciles the VEVENT's RRULE with the locally stored rule (CQ-001/CQ-007). Invariant:
+    /// only a rule the user actually changed may be rewritten; anything else keeps the raw
+    /// RRULE node untouched so parts our subset cannot represent (BYMONTHDAY, unknown FREQ, …)
+    /// survive the round-trip verbatim. "Unchanged" is recognized two ways:
+    ///  1. the stored rule text equals the raw RRULE text (normalized: unfolded, uppercased,
+    ///     token-sorted), or
+    ///  2. the stored rule equals the pull-side projection of the raw rule — exactly what
+    ///     RuleToRrule stored when sync pulled this resource, so a rule still equal to it
+    ///     cannot have been edited since.
+    /// Ambiguity (multiple RRULE lines, or textual extraction disagreeing with the parse)
+    /// always resolves to "keep" — err toward preserving server data over rewriting it.
+    /// </summary>
+    private static void ApplyRecurrence(string raw, IcalEvent ve, CalendarEvent evt)
+    {
+        var rawTexts = ExtractRruleValues(raw, evt.Uid);
+        var rawParsed = ve.RecurrenceRule;
+        var projection = RuleToRrule(rawParsed);
+
+        var ambiguous = rawTexts.Count > 1 || (rawTexts.Count == 0) != (rawParsed is null);
+        if (ambiguous)
+        {
+            return;
+        }
+
+        if (!evt.IsRecurring)
+        {
+            if (rawParsed is null || projection is null)
+            {
+                // Either there is no rule anywhere, or the raw rule is unrepresentable
+                // (e.g. FREQ=HOURLY, CQ-005): the pull side necessarily stored null, so a
+                // null local rule means "unchanged since pull" — nulling here would destroy
+                // the server-side series on a mere title edit.
+                return;
+            }
+
+            ve.RecurrenceRule = null; // the user explicitly chose "does not repeat"
+            return;
+        }
+
+        var localNorm = NormalizeRruleText(evt.RecurrenceRule);
+        var unchanged = NormalizeRruleText(rawTexts.Count == 1 ? rawTexts[0] : null) == localNorm
+                     || (projection is not null && NormalizeRruleText(projection) == localNorm);
+        if (unchanged)
+        {
+            return;
+        }
+
+        // The rule genuinely changed → rewrite from our representable subset. A rule that
+        // fails to parse leaves the raw node in place (conservative).
+        if (CalDesk.Core.Recurrence.RecurrencePattern.Parse(evt.RecurrenceRule)?.ToRrule() is { } rrule)
+        {
+            ve.RecurrenceRule = new RecurrencePattern(rrule);
+        }
+    }
+
+    /// <summary>Unfolds content lines per RFC 5545 §3.1: a line break followed by a single
+    /// linear white-space character is removed (continuation). Line endings are normalized
+    /// to '\n' first so CRLF, CR and LF inputs all work.</summary>
+    private static string UnfoldLines(string s) =>
+        s.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n ", string.Empty).Replace("\n\t", string.Empty);
+
+    /// <summary>Normalizes an RRULE value for text comparison: unfold, drop a leading
+    /// "RRULE:", trim and drop empty tokens, uppercase, sort. Order-insensitive on purpose —
+    /// token order carries no semantics in RFC 5545.</summary>
+    private static string? NormalizeRruleText(string? rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule))
+        {
+            return null;
+        }
+
+        var value = UnfoldLines(rule.Trim());
+        if (value.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value["RRULE:".Length..];
+        }
+
+        var tokens = value
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToUpperInvariant())
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+        return tokens.Count == 0 ? null : string.Join(";", tokens);
+    }
+
+    /// <summary>Extracts the RRULE values of the VEVENT selected the same way EditInPlace
+    /// selects it (UID match, else the first VEVENT). Textual on purpose — the raw text is
+    /// the only representation that still contains parts our model cannot parse.</summary>
+    private static List<string> ExtractRruleValues(string raw, string uid)
+    {
+        var blocks = new List<(string? Uid, List<string> Rrules)>();
+        string? curUid = null;
+        List<string>? curRules = null;
+
+        foreach (var rawLine in UnfoldLines(raw).Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.StartsWith("BEGIN:VEVENT", StringComparison.OrdinalIgnoreCase))
+            {
+                curUid = null;
+                curRules = new List<string>();
+            }
+            else if (line.StartsWith("END:VEVENT", StringComparison.OrdinalIgnoreCase))
+            {
+                if (curRules is not null)
+                {
+                    blocks.Add((curUid, curRules));
+                }
+
+                curUid = null;
+                curRules = null;
+            }
+            else if (curRules is not null)
+            {
+                if (curUid is null && (line.StartsWith("UID:", StringComparison.OrdinalIgnoreCase) || line.StartsWith("UID;", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var colon = line.IndexOf(':');
+                    if (colon >= 0)
+                    {
+                        curUid = line[(colon + 1)..].Trim();
+                    }
+                }
+                else if (line.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase))
+                {
+                    curRules.Add(line["RRULE:".Length..].Trim());
+                }
+            }
+        }
+
+        var selected = blocks.Find(b => string.Equals(b.Uid, uid, StringComparison.Ordinal));
+        if (selected.Rrules is null)
+        {
+            selected = blocks.Count > 0 ? blocks[0] : ((string?)null, new List<string>());
+        }
+
+        return selected.Rrules;
     }
 
     private static CalDateTime BuildDateTime(CalendarEvent evt, bool isStart)
@@ -398,19 +700,10 @@ public static class IcalMapper
 
     private static TimeZoneInfo? ResolveTz(string tzId)
     {
-        if (string.IsNullOrEmpty(tzId))
-        {
-            return null;
-        }
-
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(tzId);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
+        // Tolerates legacy global-form prefixed IDs too (CQ-006): an event edited after being
+        // pulled from a legacy server keeps its original TZID; resolving it back keeps the
+        // serialized DTSTART in the server's zone instead of silently relabeling it UTC.
+        return string.IsNullOrEmpty(tzId) ? null : TryResolveSystemTimeZone(tzId);
     }
 }
 

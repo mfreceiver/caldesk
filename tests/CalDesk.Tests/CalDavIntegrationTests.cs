@@ -39,10 +39,10 @@ public sealed class CalDavIntegrationTests
         return await factory.CreateAsync(account);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DiscoversCalendarsExcludingAddressbooks()
     {
-        if (!Configured) return;
+        Skip.IfNot(Configured, "CALDAV_TEST_* not set");
 
         await using var client = await CreateClientAsync();
         var calendars = await client.DiscoverCalendarsAsync();
@@ -53,10 +53,10 @@ public sealed class CalDavIntegrationTests
         Assert.DoesNotContain(calendars, c => c.RemoteUrl.Contains("/contact", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task QueryReturnsAndParsesEvents()
     {
-        if (!Configured) return;
+        Skip.IfNot(Configured, "CALDAV_TEST_* not set");
 
         await using var client = await CreateClientAsync();
         var calendars = await client.DiscoverCalendarsAsync();

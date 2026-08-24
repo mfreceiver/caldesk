@@ -61,6 +61,8 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         }
 
         IcalEvent? ve;
+        List<IcalEvent> sameUidOverrides;
+        IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones;
         if (_cache is not null)
         {
             // Cached null = prior parse failure (negative cache) → skip.
@@ -70,8 +72,7 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
                 yield break;
             }
 
-            ve = parsed.Calendar.Events.FirstOrDefault(e => string.Equals(e.Uid, evt.Uid, StringComparison.Ordinal))
-                 ?? parsed.Calendar.Events.FirstOrDefault();
+            (ve, sameUidOverrides, vTimeZones) = SelectMasterAndOverrides(parsed.Calendar, evt.Uid);
         }
         else
         {
@@ -89,8 +90,7 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
                 yield break;
             }
 
-            ve = cal.Events.FirstOrDefault(e => string.Equals(e.Uid, evt.Uid, StringComparison.Ordinal))
-                 ?? cal.Events.FirstOrDefault();
+            (ve, sameUidOverrides, vTimeZones) = SelectMasterAndOverrides(cal, evt.Uid);
         }
 
         if (ve is null)
@@ -113,7 +113,7 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         // recurring occurrences out of the evaluation window.
         if (ve.DtStart is { } dtStart)
         {
-            var dtStartUtc = IcalMapper.CalDateTimeToUtc(dtStart);
+            var dtStartUtc = IcalMapper.CalDateTimeToUtc(dtStart, TimeZoneInfo.Local, vTimeZones);
             if (dtStartUtc > evalStartUtc)
             {
                 evalStartUtc = dtStartUtc;
@@ -131,12 +131,20 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         {
             lock (ExpandLock)
             {
-                materialised = MaterialiseOccurrences(ve, startCal, options, occDuration, rangeEndDt);
+                materialised = MaterialiseOccurrences(ve, startCal, options, occDuration, rangeEndDt, vTimeZones);
             }
         }
         else
         {
-            materialised = MaterialiseOccurrences(ve, startCal, options, occDuration, rangeEndDt);
+            materialised = MaterialiseOccurrences(ve, startCal, options, occDuration, rangeEndDt, vTimeZones);
+        }
+
+        // CQ-004: apply same-resource RECURRENCE-ID overrides to the master series (pure
+        // in-memory mutation of the materialised list — no evaluator involved, so outside
+        // the G4 lock).
+        if (sameUidOverrides.Count > 0)
+        {
+            materialised = ApplySameResourceOverrides(ve, sameUidOverrides, materialised, vTimeZones);
         }
 
         foreach (var (startUtc, endUtc) in materialised)
@@ -161,12 +169,84 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         }
     }
 
+    /// <summary>Picks the master VEVENT (CQ-004): among the events sharing the stored UID the
+    /// one WITHOUT a RECURRENCE-ID, falling back to the overall first non-override, then the
+    /// first event at all. File order must not matter — an override listed before its master
+    /// must not be mistaken for the master (which made the whole series vanish). Also returns
+    /// the same-UID override VEVENTs (the "edit this instance only" components) and the
+    /// resource's VTIMEZONEs for TZID resolution.</summary>
+    private static (IcalEvent? Master, List<IcalEvent> Overrides, IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone> TimeZones)
+        SelectMasterAndOverrides(Ical.Net.Calendar cal, string uid)
+    {
+        var all = cal.Events;
+        var sameUid = all.Where(e => string.Equals(e.Uid, uid, StringComparison.Ordinal)).ToList();
+        IEnumerable<IcalEvent> candidates = sameUid.Count > 0 ? sameUid : all;
+
+        var master = candidates.FirstOrDefault(e => e.RecurrenceIdentifier is null)
+                     ?? candidates.FirstOrDefault();
+
+        // Overrides: same-UID components with a usable RECURRENCE-ID, excluding the master
+        // itself (an event without RECURRENCE-ID yields null anyway).
+        var overrides = sameUid
+            .Where(e => !ReferenceEquals(e, master))
+            .Select(e => (Event: e, Rid: e.RecurrenceIdentifier?.StartTime))
+            .Where(t => t.Rid is not null)
+            .Select(t => t.Event)
+            .ToList();
+
+        return (master, overrides, cal.TimeZones.ToList());
+    }
+
+    /// <summary>Reconciles same-resource RECURRENCE-ID overrides into the materialised master
+    /// occurrences (CQ-004). Each override REMOVES the master occurrence at its
+    /// RECURRENCE-ID instant and (unless CANCELLED) ADDS an occurrence at the override's own
+    /// DTSTART — a moved instance shows only at its new time, a shortened/lengthened one
+    /// carries the override's explicit DTEND. Exact-instant matching is sound because both
+    /// sides go through the same CalDateTimeToUtc pipeline. Overrides whose RECURRENCE-ID
+    /// matches nothing in the series simply contribute their own occurrence (server data
+    /// wins over our view of the master).</summary>
+    private static List<(DateTime startUtc, DateTime endUtc)> ApplySameResourceOverrides(
+        IcalEvent master,
+        List<IcalEvent> overrides,
+        List<(DateTime startUtc, DateTime endUtc)> occurrences,
+        IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones)
+    {
+        var masterDuration = EffectiveDuration(master);
+        foreach (var ov in overrides)
+        {
+            var ridUtc = IcalMapper.CalDateTimeToUtc(ov.RecurrenceIdentifier!.StartTime!, TimeZoneInfo.Local, vTimeZones);
+            occurrences.RemoveAll(o => o.startUtc == ridUtc);
+
+            // STATUS:CANCELLED overrides encode "this instance is deleted" (Google et al.):
+            // remove the master slot and add nothing.
+            if (string.Equals(ov.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (ov.DtStart is not { } overrideStart)
+            {
+                continue;
+            }
+
+            var startUtc = IcalMapper.CalDateTimeToUtc(overrideStart, TimeZoneInfo.Local, vTimeZones);
+            var endUtc = ov.DtEnd is { } overrideEnd
+                ? IcalMapper.CalDateTimeToUtc(overrideEnd, TimeZoneInfo.Local, vTimeZones)
+                : (masterDuration > TimeSpan.Zero ? startUtc.Add(masterDuration) : startUtc);
+            occurrences.Add((startUtc, endUtc));
+        }
+
+        occurrences.Sort((a, b) => a.startUtc.CompareTo(b.startUtc));
+        return occurrences;
+    }
+
     private static List<(DateTime startUtc, DateTime endUtc)> MaterialiseOccurrences(
         IcalEvent ve,
         CalDateTime startCal,
         EvaluationOptions options,
         TimeSpan occDuration,
-        DateTime rangeEndDt)
+        DateTime rangeEndDt,
+        IReadOnlyList<Ical.Net.CalendarComponents.VTimeZone>? vTimeZones)
     {
         var list = new List<(DateTime, DateTime)>();
         var guard = 0;
@@ -177,7 +257,7 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
                 break;
             }
 
-            var startUtc = IcalMapper.CalDateTimeToUtc(occ.Period.StartTime);
+            var startUtc = IcalMapper.CalDateTimeToUtc(occ.Period.StartTime, TimeZoneInfo.Local, vTimeZones);
             if (startUtc >= rangeEndDt)
             {
                 break;
@@ -187,7 +267,7 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
             // when DTEND/DURATION are set on the parent VEVENT — only Period.Duration is populated.
             // Recover the end from the parent's effective duration when needed.
             var endUtc = occ.Period.EndTime is not null
-                ? IcalMapper.CalDateTimeToUtc(occ.Period.EndTime)
+                ? IcalMapper.CalDateTimeToUtc(occ.Period.EndTime, TimeZoneInfo.Local, vTimeZones)
                 : (occDuration > TimeSpan.Zero ? startUtc.Add(occDuration) : startUtc);
 
             list.Add((startUtc, endUtc));

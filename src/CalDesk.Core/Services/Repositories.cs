@@ -63,6 +63,15 @@ public interface IEventRepository
     Task<IReadOnlyList<CalendarEvent>> GetPendingSyncAsync(CancellationToken ct = default);
 
     Task UpsertAsync(CalendarEvent evt, CancellationToken ct = default);
+
+    /// <summary>Update ONLY the server-assignment columns (<c>remote_href</c>, <c>etag</c>) of an
+    /// existing event row; every business column plus <c>sync_status</c>/<c>updated_at</c> stays
+    /// exactly as stored. Used by push write-back when the row was concurrently edited while the
+    /// PUT was in flight (CQ-003): the concurrent edit must survive, only the server's href/etag
+    /// assignment is merged in. Callers resolve the effective etag (PUT response or previous
+    /// value when the server returned none) before calling.</summary>
+    Task UpdateSyncFieldsAsync(Guid id, string? remoteHref, string? etag, CancellationToken ct = default);
+
     Task MarkDeletedAsync(Guid id, CancellationToken ct = default);
     Task HardDeleteAsync(Guid id, CancellationToken ct = default);
     Task HardDeleteAllAsync(CancellationToken ct = default);

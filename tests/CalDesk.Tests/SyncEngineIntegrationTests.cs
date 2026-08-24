@@ -26,10 +26,10 @@ public sealed class SyncEngineIntegrationTests
         public Task<bool> ExistsAsync(string target, CancellationToken ct = default) => Task.FromResult(!string.IsNullOrEmpty(_p));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task LocalFirst_CreatePushPullDelete_RoundTrip()
     {
-        if (!Configured) return;
+        Skip.IfNot(Configured, "CALDAV_TEST_* not set");
 
         var tempDb = Path.Combine(Path.GetTempPath(), $"caldesk-sync-{Guid.NewGuid():N}.db");
         try
