@@ -98,7 +98,7 @@ public partial class App : Application
         // Date-change watcher: midnight rollover, wake from sleep, manual clock/timezone
         // edits. Raises DayChanged once per new local date → refresh both view models.
         _dayChangeWatcher = new DayChangeWatcher(Dispatcher);
-        _dayChangeWatcher.DayChanged += () => DoRefreshAfterSync();
+        _dayChangeWatcher.DayChanged += OnSystemDayChanged;
         _dayChangeWatcher.Start();
 
         _creds = new WindowsCredentialStore();
@@ -324,6 +324,23 @@ public partial class App : Application
         {
             _ = _monthVm.LoadAsync();
         }
+    }
+
+    /// <summary>Called when <see cref="DayChangeWatcher.DayChanged"/> fires (midnight
+    /// rollover, manual clock/timezone edit, resume from sleep). Navigates both week and
+    /// month view models to today — ALWAYS jumps regardless of which week/month is
+    /// displayed. <see cref="WeekViewModel.NavigateTo"/> and
+    /// <see cref="MonthViewModel.NavigateTo"/> already trigger async data load with
+    /// race protection, so no additional <c>LoadAsync</c> call is needed here.
+    /// Does NOT call <see cref="DoRefreshAfterSync"/> (that path is for sync-completed
+    /// refresh only, keeping the current navigation anchor).</summary>
+    private void OnSystemDayChanged()
+    {
+        // Capture the clock ONCE so week and month can't disagree if fired
+        // exactly at the midnight boundary.
+        var now = DateTime.Today;
+        _vm.NavigateTo(WeekViewModel.MondayOf(now));
+        _monthVm.NavigateTo(DateOnly.FromDateTime(now));
     }
 
     /// <summary>Swap the merged FontSizes dictionary for S/M/L (DynamicResource so all bound

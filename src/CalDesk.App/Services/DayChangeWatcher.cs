@@ -29,8 +29,9 @@ public sealed class DayChangeWatcher : IDisposable
     {
         _dispatcher = dispatcher;
         _nowProvider = nowProvider ?? (() => DateTime.Today);
-        _timer = new DispatcherTimer(TimeSpan.FromMinutes(1), DispatcherPriority.Background,
-            (_, _) => CheckDayChanged(), dispatcher);
+        // Initial interval 60s; Start() immediately recomputes the adaptive interval.
+        _timer = new DispatcherTimer(TimeSpan.FromSeconds(60), DispatcherPriority.Background,
+            (_, _) => OnTick(), dispatcher);
         _lastKnownToday = DateOnly.FromDateTime(_nowProvider());
     }
 
@@ -45,6 +46,7 @@ public sealed class DayChangeWatcher : IDisposable
         _current = this;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.TimeChanged += OnTimeChanged;
+        UpdateTimerInterval(); // compute adaptive interval before first tick
         _timer.Start();
     }
 
@@ -73,6 +75,28 @@ public sealed class DayChangeWatcher : IDisposable
         _lastKnownToday = today;
         try { DayChanged?.Invoke(); }
         catch { /* best-effort; never crash the host (cf. ReminderService) */ }
+    }
+
+    /// <summary>DispatcherTimer tick: check day change, then recompute interval for next tick.</summary>
+    private void OnTick()
+    {
+        CheckDayChanged();
+        UpdateTimerInterval();
+    }
+
+    /// <summary>Adapt the timer interval so we fire shortly after the next local midnight
+    /// (within 2s), capped at 60s. This ensures timely day-change detection near midnight
+    /// while keeping the 60s backstop for clock step-backs / NTP drift / VM snapshot restore.</summary>
+    private void UpdateTimerInterval()
+    {
+        // _nowProvider returns DateTime.Today (midnight) in production — not useful for
+        // time-of-day arithmetic — so use DateTime.Now (wall-clock local time) directly.
+        var now = DateTime.Now;
+        var nextMidnight = now.Date.AddDays(1); // 00:00:00 local tomorrow
+        var seconds = (nextMidnight - now).TotalSeconds;
+        // +2s buffer ensures we fire AFTER midnight, not right at the boundary.
+        var next = Math.Min(60.0, Math.Max(2.0, seconds + 2.0));
+        _timer.Interval = TimeSpan.FromSeconds(next);
     }
 
     public void Dispose()
