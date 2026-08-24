@@ -96,7 +96,8 @@ public partial class App : Application
         StartupLog.Log($"OnStartup: theme applied  theme={_settingsSvc.Current.Theme}");
 
         // Date-change watcher: midnight rollover, wake from sleep, manual clock/timezone
-        // edits. Raises DayChanged once per new local date → refresh both view models.
+        // edits. Raises DayChanged once per new local date → OnSystemDayChanged jumps
+        // both week and month views to today.
         _dayChangeWatcher = new DayChangeWatcher(Dispatcher);
         _dayChangeWatcher.DayChanged += OnSystemDayChanged;
         _dayChangeWatcher.Start();

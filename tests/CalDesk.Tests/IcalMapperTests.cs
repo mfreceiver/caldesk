@@ -263,7 +263,7 @@ public sealed class IcalMapperTests
 
         var ve = Assert.Single(Ical.Net.Calendar.Load(new StringReader(ics))!.Events);
 
-        Assert.True(ve.DtStart.HasTime);
+        Assert.True(ve.DtStart!.HasTime);
         Assert.True(ve.DtStart.IsFloating);
         Assert.False(ve.DtStart.IsUtc);
         Assert.Null(ve.DtStart.TzId);
@@ -273,7 +273,7 @@ public sealed class IcalMapperTests
             IcalMapper.CalDateTimeToUtc(ve.DtStart, Shanghai));
         Assert.Equal(
             new DateTime(2026, 7, 22, 3, 0, 0, DateTimeKind.Utc),
-            IcalMapper.CalDateTimeToUtc(ve.DtEnd, Shanghai));
+            IcalMapper.CalDateTimeToUtc(ve.DtEnd!, Shanghai));
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public sealed class IcalMapperTests
 
         var ve = Assert.Single(Ical.Net.Calendar.Load(new StringReader(ics))!.Events);
 
-        Assert.True(ve.DtStart.IsUtc);
+        Assert.True(ve.DtStart!.IsUtc);
         Assert.False(ve.DtStart.IsFloating);
         Assert.Equal("UTC", ve.DtStart.TzId);
 
@@ -317,13 +317,13 @@ public sealed class IcalMapperTests
 
         var ve = Assert.Single(Ical.Net.Calendar.Load(new StringReader(ics))!.Events);
 
-        Assert.False(ve.DtStart.HasTime);
+        Assert.False(ve.DtStart!.HasTime);
 
         Assert.Equal(
             new DateTime(2026, 7, 21, 16, 0, 0, DateTimeKind.Utc),
             IcalMapper.CalDateTimeToUtc(ve.DtStart, Shanghai));
         Assert.Equal(
             new DateTime(2026, 7, 22, 16, 0, 0, DateTimeKind.Utc),
-            IcalMapper.CalDateTimeToUtc(ve.DtEnd, Shanghai));
+            IcalMapper.CalDateTimeToUtc(ve.DtEnd!, Shanghai));
     }
 }

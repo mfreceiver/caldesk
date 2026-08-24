@@ -75,12 +75,16 @@ public sealed class IcalRecurrenceExpander : IRecurrenceExpander
         }
         else
         {
-            Ical.Net.Calendar cal;
+            Ical.Net.Calendar? cal;
             try
             {
                 cal = Ical.Net.Calendar.Load(new StringReader(evt.ICalendarData));
             }
             catch
+            {
+                yield break;
+            }
+            if (cal is null)
             {
                 yield break;
             }

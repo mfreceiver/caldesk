@@ -5,10 +5,12 @@ namespace CalDesk.App.Services;
 
 /// <summary>Detects local-date changes (midnight rollover, wake from sleep, manual
 /// clock/timezone edits) and raises <see cref="DayChanged"/> once per new date.
-/// <para>Trigger sources: a 60s <see cref="DispatcherTimer"/> poll (primary fallback —
-/// NTP big-step and VM snapshot restore do NOT raise <c>TimeChanged</c>, so polling is
-/// the only reliable backstop) plus <see cref="SystemEvents.PowerModeChanged"/> (Resume)
-/// and <see cref="SystemEvents.TimeChanged"/> for faster detection.</para>
+/// <para>Trigger sources: an adaptive <see cref="DispatcherTimer"/> poll — the interval
+/// shrinks to ~2s just before each local midnight and is capped at 60s otherwise. The 60s
+/// cap backstops clock step-backs / NTP drift / VM snapshot restore, which do NOT raise
+/// <c>TimeChanged</c>, so polling stays the only reliable fallback — plus
+/// <see cref="SystemEvents.PowerModeChanged"/> (Resume) and
+/// <see cref="SystemEvents.TimeChanged"/> for faster detection.</para>
 /// <para>R5: all state (<c>_lastKnownToday</c>) lives on the UI thread only —
 /// DispatcherTimer ticks on the UI thread; SystemEvents fires on its OWN worker thread
 /// (see <c>SystemThemeWatcher</c> R5 note) and hops in via <see cref="Dispatcher"/>.
@@ -29,9 +31,14 @@ public sealed class DayChangeWatcher : IDisposable
     {
         _dispatcher = dispatcher;
         _nowProvider = nowProvider ?? (() => DateTime.Today);
-        // Initial interval 60s; Start() immediately recomputes the adaptive interval.
-        _timer = new DispatcherTimer(TimeSpan.FromSeconds(60), DispatcherPriority.Background,
-            (_, _) => OnTick(), dispatcher);
+        // Use the (priority, dispatcher) ctor — the (interval, priority, tick, dispatcher)
+        // overload AUTO-STARTS the timer at construction. Interval set here is a 60s
+        // placeholder; Start() recomputes the adaptive interval before starting.
+        _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+        {
+            Interval = TimeSpan.FromSeconds(60)
+        };
+        _timer.Tick += (_, _) => OnTick();
         _lastKnownToday = DateOnly.FromDateTime(_nowProvider());
     }
 
@@ -61,9 +68,12 @@ public sealed class DayChangeWatcher : IDisposable
     private static void Hop()
     {
         // SystemEvents fires on its own worker thread — marshal into the UI thread.
+        // Route through OnTick (not bare CheckDayChanged) so the adaptive interval is
+        // also recomputed after clock/timezone edits and resume: a same-date jump near
+        // midnight could otherwise keep a stale schedule and detect rollover up to 60s late.
         var w = _current;
         if (w is null) return;
-        try { w._dispatcher.InvokeAsync(w.CheckDayChanged); }
+        try { w._dispatcher.InvokeAsync(w.OnTick); }
         catch { /* dispatcher shutting down during exit */ }
     }
 

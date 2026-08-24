@@ -31,7 +31,10 @@ public static class IcalMapper
     {
         try
         {
-            var cal = Ical.Net.Calendar.Load(new StringReader(raw));
+            // Load is annotated nullable; a null here is a parse failure → caught below →
+            // quarantined as CalendarParseResult (same outcome the old NRE path produced).
+            var cal = Ical.Net.Calendar.Load(new StringReader(raw))
+                      ?? throw new InvalidOperationException("Calendar.Load returned null.");
             var events = new List<CalendarEvent>();
             foreach (var ve in cal.Events)
             {
@@ -317,7 +320,7 @@ public static class IcalMapper
         }
 
         cal.Events.Add(ve);
-        return new CalendarSerializer().SerializeToString(cal);
+        return new CalendarSerializer().SerializeToString(cal) ?? string.Empty;
     }
 
     private static string EditInPlace(string raw, CalendarEvent evt)
@@ -325,6 +328,11 @@ public static class IcalMapper
         try
         {
             var cal = Ical.Net.Calendar.Load(new StringReader(raw));
+            if (cal is null)
+            {
+                return BuildICalendar(evt);
+            }
+
             var ve = cal.Events.FirstOrDefault(e => string.Equals(e.Uid, evt.Uid, StringComparison.Ordinal))
                      ?? cal.Events.FirstOrDefault();
             if (ve is null)
@@ -352,7 +360,7 @@ public static class IcalMapper
                 ve.RecurrenceRule = null;
             }
 
-            return new CalendarSerializer().SerializeToString(cal);
+            return new CalendarSerializer().SerializeToString(cal) ?? string.Empty;
         }
         catch
         {
